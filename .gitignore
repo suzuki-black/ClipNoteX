@@ -1,0 +1,42 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node
+node_modules/
+.pnpm-store/
+dist/
+.next/
+.turbo/
+
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/Cargo.lock
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs / local state
+*.log
+/.dev-data/
+/coverage/
+
+# Secrets
+.env
+.env.local
+*.p12
+*.pfx
+*.cer
+notarize.json
+
+# Generated bindings
+/apps/desktop/src/types/generated/
+
+# TypeScript compiled output (*.js next to *.tsx source files)
+apps/desktop/src/*.js
+apps/desktop/src/**/*.js

@@ -1,0 +1,632 @@
+use crate::aead::{DataKeys, KeySource, Sealer};
+use crate::blobs::BlobStore;
+use crate::migrations::apply_pending;
+use crate::tables::{BY_DIGEST, BY_TIME, ITEMS};
+use clipnotex_core::{
+    model::{ClipItem, PayloadData},
+    CnxError, ClipId, Result,
+};
+use redb::{Database, ReadableTable};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Instant;
+
+pub struct StoreService {
+    db: Arc<Database>,
+    history_sealer: Sealer,
+    blobs: BlobStore,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum EvictionPolicy {
+    UntilCount(u64),
+    UntilBytes(u64),
+}
+
+impl StoreService {
+    pub fn open(data_dir: PathBuf, key_source: KeySource) -> Result<Self> {
+        std::fs::create_dir_all(&data_dir)?;
+        let db_path = data_dir.join("history.redb");
+        let db = Database::create(&db_path)
+            .map_err(|e| CnxError::Storage(format!("open db: {e}")))?;
+        apply_pending(&db)?;
+
+        let keys = DataKeys::load(&key_source)?;
+        let history_sealer = Sealer::new(&keys.history);
+        let blobs = BlobStore::new(data_dir.join("blobs"))?;
+        Ok(Self {
+            db: Arc::new(db),
+            history_sealer,
+            blobs,
+        })
+    }
+
+    /// Insert a new ClipItem; if a record with the same digest already
+    /// exists, only its `updated_at` is bumped.
+    pub fn add_item(&self, mut item: ClipItem, _payloads: Vec<PayloadData>) -> Result<()> {
+        let started = Instant::now();
+        let id_bytes = item.id.as_bytes();
+        let digest = item.digest;
+
+        // De-dup probe in a short read tx.
+        if let Some(existing) = self.lookup_by_digest(&digest)? {
+            return self.touch(existing, item.updated_at);
+        }
+
+        // TODO(M2): write payload bytes to BlobStore here, then patch
+        // item.payloads with the resulting BlobIds before sealing.
+        let serialized = bincode::serialize(&item)
+            .map_err(|e| CnxError::Serialize(e.to_string()))?;
+        let aad = item.created_at.to_be_bytes();
+        let sealed = self.history_sealer.seal(&serialized, &aad)?;
+
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        {
+            let mut items = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            let mut by_time = write
+                .open_table(BY_TIME)
+                .map_err(|e| CnxError::Storage(format!("open by_time: {e}")))?;
+            let mut by_digest = write
+                .open_table(BY_DIGEST)
+                .map_err(|e| CnxError::Storage(format!("open by_digest: {e}")))?;
+
+            items
+                .insert(id_bytes.as_slice(), sealed.as_slice())
+                .map_err(|e| CnxError::Storage(format!("insert items: {e}")))?;
+            by_time
+                .insert((item.created_at, id_bytes.as_slice()), ())
+                .map_err(|e| CnxError::Storage(format!("insert by_time: {e}")))?;
+            by_digest
+                .insert(digest.as_slice(), id_bytes.as_slice())
+                .map_err(|e| CnxError::Storage(format!("insert by_digest: {e}")))?;
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+
+        let elapsed = started.elapsed();
+        if elapsed.as_millis() > 50 {
+            tracing::warn!(?elapsed, "add_item exceeded 50ms budget");
+        }
+        item.updated_at = item.created_at;
+        Ok(())
+    }
+
+    pub fn lookup_by_digest(&self, digest: &[u8; 32]) -> Result<Option<ClipId>> {
+        let read = self
+            .db
+            .begin_read()
+            .map_err(|e| CnxError::Storage(format!("begin_read: {e}")))?;
+        let table = match read.open_table(BY_DIGEST) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let v = table
+            .get(digest.as_slice())
+            .map_err(|e| CnxError::Storage(format!("get by_digest: {e}")))?;
+        let Some(v) = v else { return Ok(None) };
+        let bytes = v.value();
+        if bytes.len() != 16 {
+            return Ok(None);
+        }
+        let mut id = [0u8; 16];
+        id.copy_from_slice(bytes);
+        Ok(Some(ClipId(ulid::Ulid::from_bytes(id))))
+    }
+
+    pub fn touch(&self, _id: ClipId, _now: i64) -> Result<()> {
+        // TODO(M2 polish): re-seal the item with new updated_at.
+        Ok(())
+    }
+
+    /// Fetch and decrypt a single item by its ULID.
+    /// Returns `None` if the item doesn't exist.
+    pub fn get_item(&self, id: ClipId) -> Result<Option<ClipItem>> {
+        let id_bytes = id.as_bytes();
+        let read = self
+            .db
+            .begin_read()
+            .map_err(|e| CnxError::Storage(format!("begin_read: {e}")))?;
+        let items_tbl = match read.open_table(ITEMS) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let sealed = match items_tbl
+            .get(id_bytes.as_slice())
+            .map_err(|e| CnxError::Storage(format!("get item: {e}")))?
+        {
+            Some(v) => v.value().to_vec(),
+            None => return Ok(None),
+        };
+        // Look up created_at from BY_TIME for the AAD.
+        // As a shortcut, try all BY_TIME entries with this id; or just try
+        // a zero AAD and fail gracefully (created_at is needed for open).
+        // Better: scan BY_TIME for this id (secondary lookup via by_digest).
+        // Simplest correct path: store created_at in the id itself isn't possible.
+        // We store created_at in BY_TIME key, so scan and find the entry.
+        let by_time = match read.open_table(BY_TIME) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let mut created_at_found: Option<i64> = None;
+        for entry in by_time
+            .iter()
+            .map_err(|e| CnxError::Storage(format!("iter by_time: {e}")))?
+        {
+            let (key, _) = entry.map_err(|e| CnxError::Storage(format!("entry: {e}")))?;
+            let (ts, candidate_id) = key.value();
+            if candidate_id == id_bytes.as_slice() {
+                created_at_found = Some(ts);
+                break;
+            }
+        }
+        let created_at = created_at_found
+            .ok_or_else(|| CnxError::Storage("item not in BY_TIME index".into()))?;
+        let aad = created_at.to_be_bytes();
+        let plain = self.history_sealer.open(&sealed, &aad)?;
+        let item: ClipItem = bincode::deserialize(&plain)
+            .map_err(|e| CnxError::Serialize(e.to_string()))?;
+        Ok(Some(item))
+    }
+
+    /// Permanently delete an item by its ULID.
+    /// Removes from ITEMS, BY_TIME, and BY_DIGEST.
+    pub fn delete_item(&self, id: ClipId) -> Result<()> {
+        let item = match self.get_item(id)? {
+            Some(i) => i,
+            None => return Ok(()), // already gone
+        };
+        let id_bytes = id.as_bytes();
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        {
+            let mut items_tbl = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            let mut by_time = write
+                .open_table(BY_TIME)
+                .map_err(|e| CnxError::Storage(format!("open by_time: {e}")))?;
+            let mut by_digest = write
+                .open_table(BY_DIGEST)
+                .map_err(|e| CnxError::Storage(format!("open by_digest: {e}")))?;
+
+            items_tbl
+                .remove(id_bytes.as_slice())
+                .map_err(|e| CnxError::Storage(format!("remove items: {e}")))?;
+            by_time
+                .remove((item.created_at, id_bytes.as_slice()))
+                .map_err(|e| CnxError::Storage(format!("remove by_time: {e}")))?;
+            by_digest
+                .remove(item.digest.as_slice())
+                .map_err(|e| CnxError::Storage(format!("remove by_digest: {e}")))?;
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+        Ok(())
+    }
+
+    /// Toggle the `pinned` flag on an item. Returns the new value.
+    pub fn pin_toggle(&self, id: ClipId) -> Result<bool> {
+        let mut item = self
+            .get_item(id)?
+            .ok_or_else(|| CnxError::Storage(format!("item {id:?} not found")))?;
+        item.pinned = !item.pinned;
+        let new_pinned = item.pinned;
+        item.updated_at = chrono::Utc::now().timestamp_millis();
+
+        let serialized = bincode::serialize(&item)
+            .map_err(|e| CnxError::Serialize(e.to_string()))?;
+        let aad = item.created_at.to_be_bytes();
+        let sealed = self.history_sealer.seal(&serialized, &aad)?;
+
+        let id_bytes = id.as_bytes();
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        {
+            let mut items_tbl = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            items_tbl
+                .insert(id_bytes.as_slice(), sealed.as_slice())
+                .map_err(|e| CnxError::Storage(format!("insert items: {e}")))?;
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+        Ok(new_pinned)
+    }
+
+    /// Scan BY_TIME in reverse (newest first), decrypt each ITEMS entry,
+    /// optionally filter by `text_preview.contains(query)`, and return up to
+    /// `limit` results.
+    pub fn list_recent(&self, limit: usize, query: Option<&str>) -> Result<Vec<ClipItem>> {
+        let read = self
+            .db
+            .begin_read()
+            .map_err(|e| CnxError::Storage(format!("begin_read: {e}")))?;
+
+        // BY_TIME key = (created_at_ms: i64, ulid: &[u8]) — iterate descending.
+        let by_time = match read.open_table(BY_TIME) {
+            Ok(t) => t,
+            Err(_) => return Ok(vec![]),
+        };
+        let items_tbl = match read.open_table(ITEMS) {
+            Ok(t) => t,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut results = Vec::with_capacity(limit.min(64));
+        for entry in by_time
+            .iter()
+            .map_err(|e| CnxError::Storage(format!("iter by_time: {e}")))?
+            .rev()
+        {
+            if results.len() >= limit {
+                break;
+            }
+            let (key, _) = entry.map_err(|e| CnxError::Storage(format!("entry: {e}")))?;
+            let (_ts, id_bytes) = key.value();
+
+            let sealed = match items_tbl
+                .get(id_bytes)
+                .map_err(|e| CnxError::Storage(format!("get item: {e}")))?
+            {
+                Some(v) => v.value().to_vec(),
+                None => continue,
+            };
+
+            // AAD = created_at big-endian, same as in add_item.
+            let aad = _ts.to_be_bytes();
+
+            let plain = match self.history_sealer.open(&sealed, &aad) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(?e, "decrypt failed for item, skipping");
+                    continue;
+                }
+            };
+
+            let item: ClipItem = match bincode::deserialize(&plain) {
+                Ok(i) => i,
+                Err(e) => {
+                    tracing::warn!(?e, "deserialize failed for item, skipping");
+                    continue;
+                }
+            };
+
+            // Optional full-text filter on text_preview.
+            if let Some(q) = query {
+                let q_lower = q.to_lowercase();
+                let matches = item
+                    .text_preview
+                    .as_deref()
+                    .map(|p| p.to_lowercase().contains(&q_lower))
+                    .unwrap_or(false);
+                if !matches {
+                    continue;
+                }
+            }
+
+            results.push(item);
+        }
+        Ok(results)
+    }
+
+    pub fn count_and_bytes(&self) -> Result<(u64, u64)> {
+        let read = self
+            .db
+            .begin_read()
+            .map_err(|e| CnxError::Storage(format!("begin_read: {e}")))?;
+        let items = match read.open_table(ITEMS) {
+            Ok(t) => t,
+            Err(_) => return Ok((0, 0)),
+        };
+        let mut count = 0u64;
+        let mut bytes = 0u64;
+        for entry in items
+            .iter()
+            .map_err(|e| CnxError::Storage(format!("iter items: {e}")))?
+        {
+            let (_, v) = entry.map_err(|e| CnxError::Storage(format!("entry: {e}")))?;
+            count += 1;
+            bytes += v.value().len() as u64;
+        }
+        Ok((count, bytes))
+    }
+
+    /// Evict oldest unpinned items until the policy target is met.
+    /// Returns the number of items removed.
+    pub fn evict(&self, policy: EvictionPolicy) -> Result<u64> {
+        // First, check whether eviction is even needed.
+        let (total_count, total_bytes) = self.count_and_bytes()?;
+        let needs_evict = match policy {
+            EvictionPolicy::UntilCount(target) => total_count > target,
+            EvictionPolicy::UntilBytes(target) => total_bytes > target,
+        };
+        if !needs_evict {
+            return Ok(0);
+        }
+
+        // Collect candidates: BY_TIME ascending (oldest first), skip pinned.
+        // We read all candidates first so we can compute running totals.
+        let read = self
+            .db
+            .begin_read()
+            .map_err(|e| CnxError::Storage(format!("begin_read: {e}")))?;
+        let by_time = match read.open_table(BY_TIME) {
+            Ok(t) => t,
+            Err(_) => return Ok(0),
+        };
+        let items_tbl = match read.open_table(ITEMS) {
+            Ok(t) => t,
+            Err(_) => return Ok(0),
+        };
+
+        // Gather (created_at, id_bytes, sealed_len) for eviction candidates.
+        let mut candidates: Vec<(i64, [u8; 16], usize, [u8; 32])> = vec![];
+        for entry in by_time
+            .iter()
+            .map_err(|e| CnxError::Storage(format!("iter by_time: {e}")))?
+        {
+            let (key, _) = entry.map_err(|e| CnxError::Storage(format!("entry: {e}")))?;
+            let (ts, id_slice) = key.value();
+            if id_slice.len() != 16 {
+                continue;
+            }
+            let mut id_bytes = [0u8; 16];
+            id_bytes.copy_from_slice(id_slice);
+
+            // Peek at the sealed blob to get size and decrypt to check pinned.
+            let sealed = match items_tbl
+                .get(id_slice)
+                .map_err(|e| CnxError::Storage(format!("get item: {e}")))?
+            {
+                Some(v) => v.value().to_vec(),
+                None => continue,
+            };
+            let sealed_len = sealed.len();
+
+            // Decrypt to read pinned flag.
+            let aad = ts.to_be_bytes();
+            let plain = match self.history_sealer.open(&sealed, &aad) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let item: ClipItem = match bincode::deserialize(&plain) {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            if item.pinned {
+                continue; // never evict pinned items
+            }
+            candidates.push((ts, id_bytes, sealed_len, item.digest));
+        }
+        drop(items_tbl);
+        drop(by_time);
+        drop(read);
+
+        // Decide how many to remove.
+        let to_remove: Vec<_> = match policy {
+            EvictionPolicy::UntilCount(target) => {
+                let excess = total_count.saturating_sub(target) as usize;
+                candidates.into_iter().take(excess).collect()
+            }
+            EvictionPolicy::UntilBytes(target) => {
+                let mut acc = total_bytes;
+                let mut out = vec![];
+                for c in candidates {
+                    if acc <= target {
+                        break;
+                    }
+                    acc = acc.saturating_sub(c.2 as u64);
+                    out.push(c);
+                }
+                out
+            }
+        };
+
+        if to_remove.is_empty() {
+            return Ok(0);
+        }
+
+        // Batch delete.
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        let removed = to_remove.len() as u64;
+        {
+            let mut items_tbl = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            let mut by_time = write
+                .open_table(BY_TIME)
+                .map_err(|e| CnxError::Storage(format!("open by_time: {e}")))?;
+            let mut by_digest = write
+                .open_table(BY_DIGEST)
+                .map_err(|e| CnxError::Storage(format!("open by_digest: {e}")))?;
+
+            for (ts, id_bytes, _, digest) in &to_remove {
+                items_tbl
+                    .remove(id_bytes.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove items: {e}")))?;
+                by_time
+                    .remove((*ts, id_bytes.as_slice()))
+                    .map_err(|e| CnxError::Storage(format!("remove by_time: {e}")))?;
+                by_digest
+                    .remove(digest.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove by_digest: {e}")))?;
+            }
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+
+        tracing::info!(removed, "evicted items");
+        Ok(removed)
+    }
+
+    pub fn blobs(&self) -> &BlobStore {
+        &self.blobs
+    }
+    pub fn db(&self) -> &Database {
+        &self.db
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clipnotex_core::model::{ClipKind, SourceApp};
+
+    fn make_item(text: &str) -> ClipItem {
+        let now = chrono::Utc::now().timestamp_millis();
+        let digest: [u8; 32] = blake3::hash(text.as_bytes()).into();
+        ClipItem {
+            id: ClipId::new(),
+            created_at: now,
+            updated_at: now,
+            source_app: SourceApp::default(),
+            primary_kind: ClipKind::Text,
+            payloads: vec![],
+            digest,
+            text_preview: Some(text.into()),
+            pinned: false,
+            tags: vec![],
+            total_bytes: text.len() as u64,
+        }
+    }
+
+    #[test]
+    fn open_and_insert() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        svc.add_item(make_item("hello"), vec![]).unwrap();
+        let (n, _) = svc.count_and_bytes().unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn duplicate_is_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        svc.add_item(make_item("dup"), vec![]).unwrap();
+        svc.add_item(make_item("dup"), vec![]).unwrap();
+        let (n, _) = svc.count_and_bytes().unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn list_recent_returns_newest_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        // Insert with distinct timestamps (1ms apart to guarantee ordering).
+        for text in ["alpha", "beta", "gamma"] {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            svc.add_item(make_item(text), vec![]).unwrap();
+        }
+        let items = svc.list_recent(10, None).unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].text_preview.as_deref(), Some("gamma"));
+        assert_eq!(items[2].text_preview.as_deref(), Some("alpha"));
+    }
+
+    #[test]
+    fn list_recent_filters_by_query() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        svc.add_item(make_item("hello world"), vec![]).unwrap();
+        svc.add_item(make_item("foo bar"), vec![]).unwrap();
+
+        let hits = svc.list_recent(10, Some("hello")).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text_preview.as_deref(), Some("hello world"));
+    }
+
+    #[test]
+    fn list_recent_respects_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        for i in 0..5 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            svc.add_item(make_item(&format!("item{i}")), vec![]).unwrap();
+        }
+        let items = svc.list_recent(3, None).unwrap();
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn delete_item_removes_from_all_indexes() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        let item = make_item("delete-me");
+        let id = item.id;
+        svc.add_item(item, vec![]).unwrap();
+        assert_eq!(svc.count_and_bytes().unwrap().0, 1);
+
+        svc.delete_item(id).unwrap();
+        assert_eq!(svc.count_and_bytes().unwrap().0, 0);
+        // Should not appear in list anymore.
+        assert!(svc.list_recent(10, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn pin_toggle_flips_flag() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        let item = make_item("pin-me");
+        let id = item.id;
+        svc.add_item(item, vec![]).unwrap();
+
+        let pinned = svc.pin_toggle(id).unwrap();
+        assert!(pinned, "first toggle should pin");
+
+        let unpinned = svc.pin_toggle(id).unwrap();
+        assert!(!unpinned, "second toggle should unpin");
+    }
+
+    #[test]
+    fn evict_by_count_removes_oldest() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        for i in 0..5 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            svc.add_item(make_item(&format!("evict{i}")), vec![]).unwrap();
+        }
+        let removed = svc.evict(EvictionPolicy::UntilCount(3)).unwrap();
+        assert_eq!(removed, 2);
+        assert_eq!(svc.count_and_bytes().unwrap().0, 3);
+        // Newest 3 should remain.
+        let items = svc.list_recent(10, None).unwrap();
+        assert_eq!(items[0].text_preview.as_deref(), Some("evict4"));
+    }
+
+    #[test]
+    fn evict_skips_pinned_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = StoreService::open(dir.path().into(), KeySource::Ephemeral).unwrap();
+        let pinned_item = make_item("pinned");
+        let pinned_id = pinned_item.id;
+        svc.add_item(pinned_item, vec![]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        svc.add_item(make_item("normal"), vec![]).unwrap();
+        svc.pin_toggle(pinned_id).unwrap();
+
+        // Evict down to 1 — only "normal" should be removed, not "pinned".
+        let removed = svc.evict(EvictionPolicy::UntilCount(1)).unwrap();
+        assert_eq!(removed, 1);
+        let items = svc.list_recent(10, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].text_preview.as_deref(), Some("pinned"));
+    }
+}

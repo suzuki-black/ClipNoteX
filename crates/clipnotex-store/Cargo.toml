@@ -1,0 +1,30 @@
+[package]
+name = "clipnotex-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Encrypted KV + blob store for ClipNoteX (redb + XChaCha20-Poly1305)."
+
+[dependencies]
+clipnotex-core   = { workspace = true }
+serde            = { workspace = true }
+bincode          = { workspace = true }
+thiserror        = { workspace = true }
+tracing          = { workspace = true }
+tokio            = { workspace = true }
+parking_lot      = { workspace = true }
+arc-swap         = { workspace = true }
+blake3           = { workspace = true }
+chrono           = { workspace = true }
+redb             = { workspace = true }
+ulid             = { workspace = true }
+zstd             = { workspace = true }
+chacha20poly1305 = { workspace = true }
+argon2           = { workspace = true }
+zeroize          = { workspace = true }
+rand             = { workspace = true }
+keyring          = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio    = { workspace = true, features = ["macros", "rt-multi-thread"] }

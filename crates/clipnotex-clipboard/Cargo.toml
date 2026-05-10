@@ -1,0 +1,32 @@
+[package]
+name = "clipnotex-clipboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OS clipboard abstraction for ClipNoteX (macOS NSPasteboard / Windows OLE Clipboard)."
+
+[dependencies]
+clipnotex-core = { workspace = true }
+serde       = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+tokio       = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+blake3      = { workspace = true }
+chrono      = { workspace = true }
+arboard     = { workspace = true }
+image       = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2            = { workspace = true }
+objc2-app-kit    = { workspace = true }
+objc2-foundation = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows       = { workspace = true }
+clipboard-win = { workspace = true }
+
+[features]
+default = []
+testing = []   # exposes mock clipboard for integration tests in dependent crates

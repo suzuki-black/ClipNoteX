@@ -1,0 +1,53 @@
+name: 🐞 Bug Report
+description: ClipNoteX が期待通りに動作しないときに使ってください
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS 13 Ventura
+        - macOS 14 Sonoma
+        - macOS 15 Sequoia
+        - Windows 10
+        - Windows 11
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: ClipNoteX version
+      placeholder: e.g. v0.1.0
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待される動作
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+    validations: { required: true }
+  - type: textarea
+    id: source_app
+    attributes:
+      label: コピー元アプリ (該当する場合)
+      placeholder: e.g. VSCode 1.92.0, Chrome 128
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ
+      description: |
+        macOS: `~/Library/Logs/ClipNoteX/clipnotex.log`
+        Windows: `%LOCALAPPDATA%\ClipNoteX\logs\clipnotex.log`
+      render: shell

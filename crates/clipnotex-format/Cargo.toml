@@ -1,0 +1,13 @@
+[package]
+name = "clipnotex-format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Language detection and formatters for ClipNoteX (v0.3+)."
+
+[dependencies]
+clipnotex-core = { workspace = true }
+serde_json     = { workspace = true }
+sqlformat      = "0.3"
+thiserror      = { workspace = true }
+tracing        = { workspace = true }

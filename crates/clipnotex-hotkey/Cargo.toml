@@ -1,0 +1,13 @@
+[package]
+name = "clipnotex-hotkey"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Global hotkey registration for ClipNoteX."
+
+[dependencies]
+clipnotex-core = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+parking_lot    = { workspace = true }
+global-hotkey  = { workspace = true }

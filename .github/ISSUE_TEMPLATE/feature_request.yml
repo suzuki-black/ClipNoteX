@@ -1,0 +1,31 @@
+name: ✨ Feature Request
+description: 新機能や改善のリクエスト
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい課題
+      placeholder: 何が不便 / 困っているか
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 検討した代替案
+  - type: dropdown
+    id: scope
+    attributes:
+      label: スコープ
+      options:
+        - UI / UX
+        - クリップボード履歴
+        - 整形ペースト
+        - DONE LOG
+        - 設定
+        - パッケージング・配布
+        - その他

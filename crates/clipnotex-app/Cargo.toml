@@ -1,0 +1,26 @@
+[package]
+name = "clipnotex-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Orchestration: capture pipeline, exclusion filter, quota manager."
+
+[dependencies]
+clipnotex-core      = { workspace = true }
+clipnotex-clipboard = { workspace = true }
+clipnotex-store     = { workspace = true }
+clipnotex-hotkey    = { workspace = true }
+clipnotex-paste     = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+thiserror           = { workspace = true }
+tracing             = { workspace = true }
+tokio               = { workspace = true }
+arc-swap            = { workspace = true }
+chrono              = { workspace = true }
+blake3              = { workspace = true }
+image               = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+clipnotex-clipboard = { workspace = true, features = ["testing"] }

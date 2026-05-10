@@ -1,0 +1,32 @@
+[package]
+name = "clipnotex-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Tauri desktop app for ClipNoteX."
+
+[lib]
+name = "clipnotex_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "clipnotex-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true, features = [] }
+
+[dependencies]
+clipnotex-core      = { workspace = true }
+clipnotex-app       = { workspace = true }
+clipnotex-store     = { workspace = true }
+clipnotex-clipboard = { workspace = true }
+clipnotex-hotkey    = { workspace = true }
+clipnotex-paste     = { workspace = true }
+clipnotex-tauri     = { path = "../../../crates/clipnotex-tauri" }
+serde               = { workspace = true }
+tokio               = { workspace = true }
+tracing             = { workspace = true }
+tracing-subscriber  = { workspace = true }
+tauri               = { workspace = true }

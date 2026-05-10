@@ -1,0 +1,23 @@
+[package]
+name = "clipnotex-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ClipNoteX shared types, settings, error and event bus."
+
+[dependencies]
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+bincode     = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+tokio       = { workspace = true }
+ulid        = { workspace = true }
+blake3      = { workspace = true }
+chrono      = { workspace = true }
+arc-swap    = { workspace = true }
+ts-rs       = { workspace = true, optional = true }
+
+[features]
+default = []
+ts-bindings = ["dep:ts-rs"]

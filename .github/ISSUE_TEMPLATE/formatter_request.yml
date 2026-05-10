@@ -1,0 +1,45 @@
+name: 🎨 Formatter Request
+description: 整形ペースト対応言語の追加リクエスト (good first issue)
+labels: ["formatter", "good first issue"]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: 対象言語
+      placeholder: e.g. YAML
+    validations: { required: true }
+  - type: dropdown
+    id: detector
+    attributes:
+      label: 言語判定の手段
+      options:
+        - 拡張子ベース
+        - 内容ヒューリスティクス
+        - hyperpolyglot で十分
+        - 不明
+  - type: input
+    id: library
+    attributes:
+      label: 利用候補ライブラリ (Rust crate / WASM プラグイン)
+      placeholder: e.g. serde_yaml
+  - type: textarea
+    id: sample_before
+    attributes:
+      label: フォーマット前のサンプル
+      render: text
+    validations: { required: true }
+  - type: textarea
+    id: sample_after
+    attributes:
+      label: フォーマット後の期待結果
+      render: text
+    validations: { required: true }
+  - type: checkboxes
+    id: implementation
+    attributes:
+      label: 実装範囲
+      options:
+        - label: フォーマッタ実装 (`crates/clipnotex-format/src/lang/`)
+        - label: 言語判定追加 (`crates/clipnotex-format/src/detect.rs`)
+        - label: 設定スキーマ拡張
+        - label: ドキュメント更新

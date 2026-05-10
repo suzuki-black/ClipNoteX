@@ -1,0 +1,16 @@
+[package]
+name = "clipnotex-paste"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Paste injection for ClipNoteX (Stage A in v0.1)."
+
+[dependencies]
+clipnotex-core      = { workspace = true }
+clipnotex-clipboard = { workspace = true }
+clipnotex-store     = { workspace = true }
+clipnotex-format    = { workspace = true }
+thiserror           = { workspace = true }
+tracing             = { workspace = true }
+tokio               = { workspace = true }
+enigo               = { workspace = true }
