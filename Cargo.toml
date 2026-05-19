@@ -71,7 +71,7 @@ enigo           = "0.3"
 image           = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # tauri
-tauri           = { version = "2", features = [] }
+tauri           = { version = "2", features = ["tray-icon"] }
 tauri-build     = { version = "2" }
 ts-rs           = { version = "10", features = ["serde-compat", "chrono-impl"] }
 

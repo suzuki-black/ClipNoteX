@@ -22,6 +22,7 @@ use clipnotex_app::{run_capture_loop, ExclusionFilter, QuotaManager};
 use clipnotex_clipboard::SelfWriteGuard;
 use clipnotex_core::{
     bus::{CoreEvent, EventBus},
+    ids::HotkeyId,
     settings::Settings,
 };
 use clipnotex_donelog::DoneLogStore;
@@ -205,34 +206,75 @@ fn compose_inner(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     };
 
     // ---------- Hotkeys (non-fatal) ----------
-    match HotkeyService::new(bus.clone()) {
-        Ok(hotkey_svc) => {
-            let shortcuts: Vec<_> = settings
-                .shortcuts
-                .iter()
-                .filter_map(|(id, binding)| {
-                    clipnotex_hotkey::platform_accel(binding).map(|a| (*id, a.to_string()))
-                })
-                .collect();
-            for r in hotkey_svc.register_all(&shortcuts) {
-                if let Err(ref f) = r.outcome {
-                    tracing::warn!(
-                        id = ?r.id,
-                        accelerator = %r.accelerator,
-                        reason = %f.reason,
-                        "hotkey registration failed"
-                    );
+    // HotkeyService を Arc で保持し、ポンプループ内で生かし続ける。
+    // Arc が drop されると OS のホットキー登録も解除されるため重要。
+    let hotkey_svc_opt: Option<Arc<HotkeyService>> =
+        match HotkeyService::new(bus.clone()) {
+            Ok(svc) => {
+                let shortcuts: Vec<_> = settings
+                    .shortcuts
+                    .iter()
+                    .filter_map(|(id, binding)| {
+                        clipnotex_hotkey::platform_accel(binding)
+                            .map(|a| (*id, a.to_string()))
+                    })
+                    .collect();
+                for r in svc.register_all(&shortcuts) {
+                    if let Err(ref f) = r.outcome {
+                        tracing::warn!(
+                            id = ?r.id,
+                            accelerator = %r.accelerator,
+                            reason = %f.reason,
+                            "hotkey registration failed"
+                        );
+                    }
+                }
+                Some(svc)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    ?e,
+                    "hotkey service unavailable — global shortcuts disabled. \
+                     Grant Accessibility permission in System Settings if needed."
+                );
+                None
+            }
+        };
+
+    // ホットキーポンプループ:
+    // global-hotkey は OS イベントをチャネルに積む。
+    // pump() を定期的に呼んで CoreEvent::HotkeyPressed に変換する。
+    if let Some(svc) = hotkey_svc_opt {
+        tauri::async_runtime::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_millis(50));
+            loop {
+                interval.tick().await;
+                svc.pump();
+            }
+        });
+    }
+
+    // ホットキーイベントリスナー: ShowHistory でウィンドウを表示
+    {
+        let app_handle = app.handle().clone();
+        let mut hotkey_rx = bus.subscribe();
+        tauri::async_runtime::spawn(async move {
+            while let Ok(ev) = hotkey_rx.recv().await {
+                if let CoreEvent::HotkeyPressed(HotkeyId::ShowHistory) = ev {
+                    show_history_window(&app_handle);
                 }
             }
-        }
-        Err(e) => {
-            tracing::warn!(
-                ?e,
-                "hotkey service unavailable — global shortcuts disabled. \
-                 Grant Accessibility permission in System Settings if needed."
-            );
-        }
+        });
     }
+
+    // ---------- System tray (non-fatal) ----------
+    setup_tray(app);
+
+    // macOS: Dock に表示しない (クリップボードマネージャーの標準動作)
+    // macOS: Dock に表示しない (void を返すので Result なし)
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
     // ---------- Register AppState ----------
     app.manage(AppState {
@@ -244,6 +286,93 @@ fn compose_inner(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
     tracing::info!("compose_inner() completed successfully");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tray icon setup
+// ---------------------------------------------------------------------------
+
+/// メニューバーアイコンを作成する。
+/// 失敗してもアプリは継続できるので、エラーはすべてログして無視する。
+fn setup_tray(app: &tauri::App) {
+    use tauri::{
+        menu::{Menu, MenuItem, PredefinedMenuItem},
+        tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    };
+
+    let show = match MenuItem::with_id(app, "show", "Show ClipNoteX", true, None::<&str>) {
+        Ok(m) => m,
+        Err(e) => { tracing::warn!(?e, "tray: failed to create show menu item"); return; }
+    };
+    let sep = match PredefinedMenuItem::separator(app) {
+        Ok(s) => s,
+        Err(e) => { tracing::warn!(?e, "tray: failed to create separator"); return; }
+    };
+    let quit = match MenuItem::with_id(app, "quit", "Quit ClipNoteX", true, None::<&str>) {
+        Ok(m) => m,
+        Err(e) => { tracing::warn!(?e, "tray: failed to create quit menu item"); return; }
+    };
+    let menu = match Menu::with_items(app, &[&show, &sep, &quit]) {
+        Ok(m) => m,
+        Err(e) => { tracing::warn!(?e, "tray: failed to create menu"); return; }
+    };
+
+    let icon = match app.default_window_icon().cloned() {
+        Some(i) => i,
+        None => { tracing::warn!("tray: no app icon available, skipping tray"); return; }
+    };
+
+    let result = TrayIconBuilder::new()
+        .icon(icon)
+        .menu(&menu)
+        .tooltip("ClipNoteX")
+        // 左クリックはウィンドウ表示、右クリックはメニュー
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_history_window(app),
+            "quit" => {
+                tracing::info!("quit requested from tray menu");
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                toggle_history_window(tray.app_handle());
+            }
+        })
+        .build(app);
+
+    match result {
+        Ok(_) => tracing::info!("system tray icon created"),
+        Err(e) => tracing::warn!(?e, "failed to create system tray icon"),
+    }
+}
+
+/// 履歴ウィンドウを表示してフォーカスする。
+fn show_history_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("history") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// 履歴ウィンドウの表示/非表示をトグルする。
+fn toggle_history_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("history") {
+        match window.is_visible() {
+            Ok(true) => { let _ = window.hide(); }
+            _ => {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

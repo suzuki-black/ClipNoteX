@@ -16,6 +16,14 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| setup::compose(app))
+        // ×ボタンはアプリを終了させない — ウィンドウを隠すだけ。
+        // トレイアイコンまたは「Quit ClipNoteX」メニューで終了する。
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::list_history,
             commands::paste_item,
