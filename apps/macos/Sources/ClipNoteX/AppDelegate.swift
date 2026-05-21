@@ -11,8 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1) Rust コア初期化
         let dataDir = Self.appSupportDir().path
+        // Ephemeral keys (in-memory) only when CLIPNOTEX_EPHEMERAL=1.
+        // Default is to use the macOS Keychain so history survives restarts.
+        let ephemeral: Int32 =
+            (ProcessInfo.processInfo.environment["CLIPNOTEX_EPHEMERAL"] == "1") ? 1 : 0
         let status = dataDir.withCString { cstr in
-            cnx_init(cstr, /* ephemeral_keys: */ 1) // dev は 1, prod は 0
+            cnx_init(cstr, ephemeral)
         }
         guard status == 0 else {
             NSLog("ClipNoteX: cnx_init failed (status=\(status))")

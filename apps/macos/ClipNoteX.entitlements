@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        ClipNoteX hardened-runtime entitlements.
+
+        - cs.allow-unsigned-executable-memory : NO  (we don't JIT)
+        - cs.disable-library-validation       : NO  (we ship our own static lib)
+        - app-sandbox                          : NO  (we need accessibility +
+                                                       arbitrary clipboard read)
+
+        We DO need:
+          - cs.disable-executable-page-protection : NO  (Tokio is fine without it)
+          - Apple Events for frontmost-app detection (NSWorkspace)
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+    <!-- Required: synthesize Cmd+V keystroke via enigo -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>
