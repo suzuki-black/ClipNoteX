@@ -1,0 +1,297 @@
+// SearchPanel — 検索可能なクリップボード履歴ポップアップ。
+//
+// 設計:
+//   - `NSPanel` + `.nonactivatingPanel` style mask
+//     → アプリをアクティブ化せずキー入力を受け取れる
+//     → 直前のフロントアプリは frontmost のままなので、Cmd+V を合成すれば
+//       元のアプリにペーストされる (= Maccy / Alfred と同型)
+//   - 上部にサーチフィールド、下に NSTableView (フィルタ済みリスト)
+//   - ↑↓ で選択、⏎ でペースト、1〜9 で即ペースト、Esc で閉じる
+//   - クリック外し / アプリ切替で自動的に隠れる
+//
+// FFI: 文字入力毎に `cnx_list_history_json(query, limit)` を呼んで再描画。
+
+import AppKit
+import Foundation
+import ClipNoteXCore
+
+final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+
+    static let shared = SearchPanel()
+
+    private let searchField = NSSearchField()
+    private let table = NSTableView()
+    private var items: [HistoryItem] = []
+
+    private init() {
+        let panel = NonActivatingPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+            styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "ClipNoteX"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isMovableByWindowBackground = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.isFloatingPanel = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        super.init(window: panel)
+        panel.delegate = self
+        setupUI()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - UI
+
+    private func setupUI() {
+        guard let content = window?.contentView else { return }
+
+        searchField.placeholderString = "Search clipboard…"
+        searchField.delegate = self
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = table
+
+        table.dataSource = self
+        table.delegate = self
+        table.headerView = nil
+        table.allowsMultipleSelection = false
+        table.usesAlternatingRowBackgroundColors = true
+        table.rowHeight = 28
+        table.target = self
+        table.doubleAction = #selector(rowDoubleClicked)
+
+        let col = NSTableColumn(identifier: .init("c"))
+        col.width = 460
+        table.addTableColumn(col)
+
+        let hint = NSTextField(labelWithString: "↑↓ navigate · ⏎ paste · 1–9 quick · ⎋ close")
+        hint.font = .systemFont(ofSize: 10)
+        hint.textColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+
+        content.addSubview(searchField)
+        content.addSubview(scroll)
+        content.addSubview(hint)
+
+        NSLayoutConstraint.activate([
+            searchField.topAnchor.constraint(equalTo: content.topAnchor, constant: 32),
+            searchField.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            searchField.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+
+            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: hint.topAnchor, constant: -4),
+
+            hint.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            hint.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -6),
+        ])
+    }
+
+    // MARK: - Show / hide
+
+    func show(near statusItem: NSStatusItem?) {
+        reload(query: "")
+        searchField.stringValue = ""
+        // Pre-select first row
+        if !items.isEmpty {
+            table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+
+        // Position the panel just below the status item's icon.
+        if let button = statusItem?.button,
+           let buttonWindow = button.window,
+           let panel = window {
+            let buttonFrameInWindow = button.convert(button.bounds, to: nil)
+            let screenRect = buttonWindow.convertToScreen(buttonFrameInWindow)
+            let panelOrigin = NSPoint(
+                x: screenRect.midX - panel.frame.width / 2,
+                y: screenRect.minY - panel.frame.height - 6
+            )
+            panel.setFrameOrigin(panelOrigin)
+        } else {
+            window?.center()
+        }
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+        // フォーカスをサーチフィールドに
+        window?.makeFirstResponder(searchField)
+    }
+
+    func hide() {
+        window?.orderOut(nil)
+    }
+
+    // MARK: - Data
+
+    private func reload(query: String) {
+        let json: UnsafeMutablePointer<CChar>?
+        if query.isEmpty {
+            json = cnx_list_history_json(nil, 50)
+        } else {
+            json = query.withCString { cstr in cnx_list_history_json(cstr, 50) }
+        }
+        defer { if let j = json { cnx_free_string(j) } }
+        guard let json,
+              let str = String(validatingUTF8: json),
+              let data = str.data(using: .utf8) else {
+            items = []
+            table.reloadData()
+            return
+        }
+        items = (try? JSONDecoder().decode([HistoryItem].self, from: data)) ?? []
+        table.reloadData()
+        if !items.isEmpty {
+            table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+            table.scrollRowToVisible(0)
+        }
+    }
+
+    // MARK: - Actions
+
+    @objc private func rowDoubleClicked() {
+        pasteSelected()
+    }
+
+    private func pasteSelected() {
+        guard let item = currentItem() else { return }
+        hide()
+        // 60ms 待って前面アプリにフォーカスが戻ってからペースト
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            let r = item.id.withCString { cstr in cnx_paste_item(cstr, 0) }
+            if r != 0, let msg = cnx_last_error() {
+                NSLog("paste_item failed: \(String(cString: msg))")
+                cnx_free_string(msg)
+            }
+        }
+    }
+
+    private func currentItem() -> HistoryItem? {
+        let row = table.selectedRow
+        return (0..<items.count).contains(row) ? items[row] : nil
+    }
+
+    // MARK: - TextField delegate (search field input)
+
+    func controlTextDidChange(_ obj: Notification) {
+        reload(query: searchField.stringValue)
+    }
+
+    // Search field interprets some key commands, but we forward arrows/enter to the table.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveDown(_:)):
+            moveSelection(by: +1)
+            return true
+        case #selector(NSResponder.moveUp(_:)):
+            moveSelection(by: -1)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            pasteSelected()
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            hide()
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func moveSelection(by delta: Int) {
+        if items.isEmpty { return }
+        let cur = table.selectedRow
+        let next = max(0, min(items.count - 1, cur + delta))
+        table.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
+        table.scrollRowToVisible(next)
+    }
+
+    // MARK: - Key events from the panel itself (number quick-paste)
+
+    func handleQuickPasteKey(_ event: NSEvent) -> Bool {
+        // 1〜9 で n 番目をペースト (修飾キーなし)
+        guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty,
+              event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty else {
+            return false
+        }
+        if let n = Int(chars), (1...9).contains(n), n - 1 < items.count {
+            table.selectRowIndexes(IndexSet(integer: n - 1), byExtendingSelection: false)
+            pasteSelected()
+            return true
+        }
+        return false
+    }
+
+    // MARK: - TableView data source
+
+    func numberOfRows(in tableView: NSTableView) -> Int { items.count }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let item = items[row]
+        let cell = NSTableCellView()
+        cell.translatesAutoresizingMaskIntoConstraints = false
+
+        let idx = NSTextField(labelWithString: row < 9 ? "\(row + 1)" : " ")
+        idx.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        idx.textColor = .secondaryLabelColor
+        idx.alignment = .right
+
+        let preview = NSTextField(labelWithString: item.preview.replacingOccurrences(of: "\n", with: " "))
+        preview.lineBreakMode = .byTruncatingTail
+        preview.font = .systemFont(ofSize: 12)
+
+        let source = NSTextField(labelWithString: item.source_app)
+        source.font = .systemFont(ofSize: 10)
+        source.textColor = .secondaryLabelColor
+
+        let h = NSStackView(views: [idx, preview, source])
+        h.orientation = .horizontal
+        h.spacing = 8
+        h.alignment = .centerY
+        h.translatesAutoresizingMaskIntoConstraints = false
+        idx.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        source.widthAnchor.constraint(lessThanOrEqualToConstant: 100).isActive = true
+
+        cell.addSubview(h)
+        NSLayoutConstraint.activate([
+            h.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 12),
+            h.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -12),
+            h.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
+        cell.textField = preview
+        return cell
+    }
+
+    // MARK: - Window delegate (auto-hide)
+
+    func windowDidResignKey(_ notification: Notification) {
+        // クリック外し / 他アプリ切替で隠す
+        hide()
+    }
+}
+
+// MARK: - NSPanel subclass that can become key (needed for nonactivatingPanel)
+
+final class NonActivatingPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func keyDown(with event: NSEvent) {
+        // Esc で閉じる
+        if event.keyCode == 53 { // kVK_Escape
+            SearchPanel.shared.hide()
+            return
+        }
+        // 数字キーで即ペースト (検索欄が非フォーカスのとき)
+        if SearchPanel.shared.handleQuickPasteKey(event) { return }
+        super.keyDown(with: event)
+    }
+}
