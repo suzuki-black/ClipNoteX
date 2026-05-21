@@ -19,3 +19,4 @@ crates/clipnotex-ffi/include/
 
 # Logs
 *.log
+apps/macos/build/

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>ClipNoteX</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.clipnotex.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>ClipNoteX</string>
+    <key>CFBundleDisplayName</key>
+    <string>ClipNoteX</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <!-- メニューバー常駐 (Dock 非表示) -->
+    <key>LSUIElement</key>
+    <true/>
+    <!-- ペースト合成にアクセシビリティ権限が必要 -->
+    <key>NSAccessibilityUsageDescription</key>
+    <string>ClipNoteX uses Accessibility to simulate paste keystrokes (Cmd+V) into the focused application.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>ClipNoteX uses Apple Events to query the frontmost application for clipboard source attribution.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT © 2026 suzuki-black</string>
+</dict>
+</plist>
