@@ -89,6 +89,16 @@ int32_t cnx_update_done_overlay_json(const char *args_json);
 char *cnx_export_done_markdown(const char *date);
 
 /**
+ * Format text without pasting.
+ * `text`     : UTF-8 source.
+ * `lang`     : "auto" | "json" | "sql" | "markdown" | "plain" | "html" | ... (or null).
+ * `indent`   : spaces for indentation (0 = library default).
+ *
+ * Returns JSON `{ formatted: "...", detected_lang: "..." }`; null on error.
+ */
+char *cnx_format_preview_json(const char *text, const char *lang, uint32_t indent);
+
+/**
  * Register a hotkey. `accelerator` is e.g. "Cmd+Shift+V".
  */
 int32_t cnx_register_hotkey(int32_t id, const char *accelerator);

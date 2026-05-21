@@ -58,6 +58,9 @@ final class StatusBarController {
         donelog.target = self
         menu.addItem(donelog)
         menu.addItem(.separator())
+        let prefs = NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
+        prefs.target = self
+        menu.addItem(prefs)
         let about = NSMenuItem(title: "About ClipNoteX", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
@@ -73,6 +76,10 @@ final class StatusBarController {
 
     @objc private func openDoneLog() {
         DoneLogWindow.show()
+    }
+
+    @objc private func openPreferences() {
+        PreferencesWindow.show()
     }
 
     @objc private func showAbout() {

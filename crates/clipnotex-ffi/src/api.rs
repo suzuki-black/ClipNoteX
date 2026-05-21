@@ -546,6 +546,71 @@ pub unsafe extern "C" fn cnx_export_done_markdown(date: *const c_char) -> *mut c
 }
 
 // ---------------------------------------------------------------------------
+// Format preview
+// ---------------------------------------------------------------------------
+
+/// Format text without pasting.
+/// `text`     : UTF-8 source.
+/// `lang`     : "auto" | "json" | "sql" | "markdown" | "plain" | "html" | ... (or null).
+/// `indent`   : spaces for indentation (0 = library default).
+///
+/// Returns JSON `{ formatted: "...", detected_lang: "..." }`; null on error.
+#[no_mangle]
+pub unsafe extern "C" fn cnx_format_preview_json(
+    text: *const c_char,
+    lang: *const c_char,
+    indent: u32,
+) -> *mut c_char {
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return std::ptr::null_mut();
+        }
+    };
+    let src = match cstr_to_str(text) {
+        Some(s) => s.to_string(),
+        None => {
+            set_last_error("format_preview: text null");
+            return std::ptr::null_mut();
+        }
+    };
+    let lang_hint = cstr_to_str(lang).and_then(parse_lang);
+    let opts = FormatOptions {
+        indent: if indent == 0 { None } else { Some(indent as u8) },
+        ..Default::default()
+    };
+    match st.paste.format_preview(&src, lang_hint, &opts) {
+        Ok((detected, formatted)) => {
+            let json = serde_json::json!({
+                "formatted": formatted,
+                "detected_lang": format!("{detected:?}").to_lowercase(),
+            });
+            into_c_string(json.to_string())
+        }
+        Err(e) => {
+            set_last_error(format!("format: {e}"));
+            std::ptr::null_mut()
+        }
+    }
+}
+
+fn parse_lang(s: &str) -> Option<clipnotex_format::Language> {
+    use clipnotex_format::Language as L;
+    match s.to_lowercase().as_str() {
+        "json" => Some(L::Json),
+        "sql" => Some(L::Sql),
+        "markdown" | "md" => Some(L::Markdown),
+        "plain" | "plaintext" | "text" => Some(L::PlainText),
+        "html" => Some(L::Html),
+        "css" => Some(L::Css),
+        "javascript" | "js" => Some(L::JavaScript),
+        "typescript" | "ts" => Some(L::TypeScript),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Hotkeys
 // ---------------------------------------------------------------------------
 

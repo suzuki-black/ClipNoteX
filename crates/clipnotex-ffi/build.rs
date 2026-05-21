@@ -29,4 +29,9 @@ fn main() {
     // ヘッダ生成設定ファイル/ ソースを変更したら再実行
     println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=src/api.rs");
+    println!("cargo:rerun-if-changed=src/state.rs");
+    println!("cargo:rerun-if-changed=src/strings.rs");
+    println!("cargo:rerun-if-changed=src/runtime.rs");
+    println!("cargo:rerun-if-changed=src/errors.rs");
 }

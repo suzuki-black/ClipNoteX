@@ -73,7 +73,7 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         col.width = 460
         table.addTableColumn(col)
 
-        let hint = NSTextField(labelWithString: "↑↓ navigate · ⏎ paste · 1–9 quick · ⎋ close")
+        let hint = NSTextField(labelWithString: "↑↓ navigate · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · 1–9 quick · ⎋ close")
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = .secondaryLabelColor
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -162,16 +162,28 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         pasteSelected()
     }
 
-    private func pasteSelected() {
+    private func pasteSelected(mode: Int32 = 0) {
         guard let item = currentItem() else { return }
         hide()
         // 60ms 待って前面アプリにフォーカスが戻ってからペースト
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-            let r = item.id.withCString { cstr in cnx_paste_item(cstr, 0) }
+            let r = item.id.withCString { cstr in cnx_paste_item(cstr, mode) }
             if r != 0, let msg = cnx_last_error() {
                 NSLog("paste_item failed: \(String(cString: msg))")
                 cnx_free_string(msg)
             }
+        }
+    }
+
+    /// Alt+Enter で Format Paste モーダルを開く。
+    fileprivate func openFormatModalForSelected() {
+        guard let item = currentItem() else { return }
+        hide()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NSApp.activate(ignoringOtherApps: true)
+            let win = FormatPasteWindow(itemId: item.id, sourceText: item.preview)
+            win.showWindow(nil)
+            win.window?.makeKeyAndOrderFront(nil)
         }
     }
 
@@ -196,7 +208,15 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
             moveSelection(by: -1)
             return true
         case #selector(NSResponder.insertNewline(_:)):
-            pasteSelected()
+            // Shift+Enter = plain (mode 1) / Alt+Enter = format modal / default = normal
+            let mod = NSApp.currentEvent?.modifierFlags ?? []
+            if mod.contains(.shift) {
+                pasteSelected(mode: 1)
+            } else if mod.contains(.option) {
+                openFormatModalForSelected()
+            } else {
+                pasteSelected()
+            }
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             hide()
