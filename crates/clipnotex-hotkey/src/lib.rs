@@ -7,7 +7,7 @@
 //! - CI で主要環境との衝突テストを行うことを推奨 (IMPLEMENTATION §OS注意点)。
 
 use clipnotex_core::{bus::EventBus, ids::HotkeyId, CnxError, Result};
-use global_hotkey::{hotkey::HotKey, GlobalHotKeyEvent, GlobalHotKeyManager};
+use global_hotkey::{hotkey::HotKey, GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -112,7 +112,13 @@ impl HotkeyService {
     /// hotkey events.
     pub fn pump(&self) {
         while let Ok(ev) = GlobalHotKeyEvent::receiver().try_recv() {
+            // Pressed のみ処理。Released まで拾うと「押下時に show, 離した時に hide」で
+            // ウィンドウが押している間だけ表示される現象になる。
+            if ev.state != HotKeyState::Pressed {
+                continue;
+            }
             if let Some(id) = self.bindings.lock().get(&ev.id).copied() {
+                tracing::debug!(?id, "hotkey pressed");
                 self.bus
                     .emit(clipnotex_core::bus::CoreEvent::HotkeyPressed(id));
             }

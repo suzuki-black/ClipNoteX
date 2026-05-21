@@ -141,14 +141,21 @@ impl PasteController {
         payloads: Vec<PayloadData>,
         digest: [u8; 32],
     ) -> Result<()> {
+        tracing::info!("paste_stage_a: snapshot clipboard for restore");
         let backup = self.writer.snapshot_for_restore()?;
+        tracing::info!(backup_n = backup.len(), "paste_stage_a: backup ready");
         self.guard.register(digest);
+        tracing::info!("paste_stage_a: writing payloads to clipboard");
         self.writer.write(&payloads)?;
+        tracing::info!("paste_stage_a: synthesize keystroke (Cmd+V)");
         synthesize_paste_keystroke()?;
+        tracing::info!("paste_stage_a: keystroke sent, waiting before restore");
         tokio::time::sleep(self.restore_delay).await;
+        tracing::info!("paste_stage_a: restoring original clipboard");
         if let Err(e) = self.writer.write(&backup) {
             tracing::warn!(?e, "failed to restore clipboard after Stage A paste");
         }
+        tracing::info!("paste_stage_a: DONE");
         Ok(())
     }
 
@@ -240,8 +247,10 @@ fn try_unicode_keystroke(text: &str) -> Result<()> {
 
 fn synthesize_paste_keystroke() -> Result<()> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    tracing::info!("synthesize_paste_keystroke: creating Enigo");
     let mut e = Enigo::new(&Settings::default())
         .map_err(|e| CnxError::Paste(format!("enigo init: {e}")))?;
+    tracing::info!("synthesize_paste_keystroke: Enigo ready");
     #[cfg(target_os = "macos")]
     let modifier = Key::Meta;
     #[cfg(target_os = "windows")]
@@ -249,12 +258,29 @@ fn synthesize_paste_keystroke() -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let modifier = Key::Control;
 
+    // ⚠️ クラッシュ防止 (macOS):
+    //   Key::Unicode('v') を使うと enigo 内部で `TSMGetInputSourceProperty`
+    //   (現在のキーボードレイアウトから 'v' のキーコードを引く API) が呼ばれる。
+    //   この API は main dispatch queue からしか呼べないため、tokio worker
+    //   からのペースト呼び出しで dispatch_assert_queue_fail → SIGTRAP で死ぬ。
+    //   → 物理キーコードを直接指定して TSM を経由しない経路に切り替える。
+    #[cfg(target_os = "macos")]
+    let v_key = Key::Other(0x09); // kVK_ANSI_V
+    #[cfg(target_os = "windows")]
+    let v_key = Key::Other(0x56); // VK_V
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let v_key = Key::Unicode('v');
+
+    tracing::info!("synthesize_paste_keystroke: Cmd press");
     e.key(modifier, Direction::Press)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
-    e.key(Key::Unicode('v'), Direction::Click)
+    tracing::info!("synthesize_paste_keystroke: V click");
+    e.key(v_key, Direction::Click)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
+    tracing::info!("synthesize_paste_keystroke: Cmd release");
     e.key(modifier, Direction::Release)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
+    tracing::info!("synthesize_paste_keystroke: COMPLETE");
     Ok(())
 }
 

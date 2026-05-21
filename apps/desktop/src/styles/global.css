@@ -592,6 +592,36 @@ body,
   margin-left: auto;
 }
 
+.done-item__delete-btn {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+  flex-shrink: 0;
+}
+
+.done-item:hover .done-item__delete-btn {
+  opacity: 0.8;
+}
+
+.done-item__delete-btn:hover {
+  opacity: 1 !important;
+  color: #e05555;
+  background: rgba(224, 85, 85, 0.12);
+}
+
+.done-item__delete-btn:disabled {
+  opacity: 0.2 !important;
+  cursor: not-allowed;
+}
+
 .done-item__body {
   font-size: 12px;
   line-height: 1.5;

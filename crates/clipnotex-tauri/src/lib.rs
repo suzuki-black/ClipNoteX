@@ -38,6 +38,7 @@ pub fn run() {
             commands::list_done,
             commands::update_done_overlay,
             commands::export_done_markdown,
+            commands::delete_done,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -255,14 +255,15 @@ fn compose_inner(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         });
     }
 
-    // ホットキーイベントリスナー: ShowHistory でウィンドウを表示
+    // ホットキーイベントリスナー: ShowHistory でウィンドウをトグル
+    // (Clipy 同様、押すたび開閉。隠れている時はグローバルホットキーとして発火する)
     {
         let app_handle = app.handle().clone();
         let mut hotkey_rx = bus.subscribe();
         tauri::async_runtime::spawn(async move {
             while let Ok(ev) = hotkey_rx.recv().await {
                 if let CoreEvent::HotkeyPressed(HotkeyId::ShowHistory) = ev {
-                    show_history_window(&app_handle);
+                    toggle_history_window(&app_handle);
                 }
             }
         });
@@ -271,10 +272,12 @@ fn compose_inner(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     // ---------- System tray (non-fatal) ----------
     setup_tray(app);
 
-    // macOS: Dock に表示しない (クリップボードマネージャーの標準動作)
-    // macOS: Dock に表示しない (void を返すので Result なし)
+    // macOS: 当面 Regular ポリシー (Dock に出るが、キーボード入力を確実に受け取る)。
+    // Accessory にすると set_focus 後も WebView がキーボード入力を受け取れない
+    // 場合があり、Enter キーで Paste 発火に失敗する事象を確認したため一旦戻す。
+    // TODO: ステータスバー型を実現したい場合は NSPanel ベースの実装が必要 (v0.2 検討)。
     #[cfg(target_os = "macos")]
-    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
     // ---------- Register AppState ----------
     app.manage(AppState {
@@ -354,25 +357,85 @@ fn setup_tray(app: &tauri::App) {
     }
 }
 
-/// 履歴ウィンドウを表示してフォーカスする。
+/// 履歴ウィンドウを表示する (Clipy 風)。
+/// マウスカーソル付近に配置し、検索入力できるようフォーカスを与える。
 fn show_history_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("history") {
+        position_window_near_cursor(&window);
         let _ = window.show();
         let _ = window.set_focus();
     }
 }
 
 /// 履歴ウィンドウの表示/非表示をトグルする。
+/// 注意: ActivationPolicy はトグルしない (起動時 Accessory のまま)。
 fn toggle_history_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("history") {
-        match window.is_visible() {
-            Ok(true) => { let _ = window.hide(); }
-            _ => {
-                let _ = window.show();
+    let Some(window) = app.get_webview_window("history") else {
+        tracing::error!("toggle: history window not found");
+        return;
+    };
+    let visible = window.is_visible();
+    let focused = window.is_focused();
+    tracing::info!(?visible, ?focused, "toggle_history_window called");
+
+    match visible {
+        Ok(true) => {
+            // 表示中だが裏に隠れているケース: hide ではなく前面に出す
+            if matches!(focused, Ok(false)) {
+                tracing::info!("visible but not focused → bringing to front");
                 let _ = window.set_focus();
+                return;
             }
+            let r = window.hide();
+            tracing::info!(?r, "hide called");
+        }
+        _ => {
+            position_window_near_cursor(&window);
+            let r_show = window.show();
+            let r_focus = window.set_focus();
+            tracing::info!(?r_show, ?r_focus, "show + set_focus called");
         }
     }
+}
+
+/// マウスカーソル付近にウィンドウを移動する (Clipy 風配置)。
+/// 画面外にはみ出さないようクランプする。
+fn position_window_near_cursor(window: &tauri::WebviewWindow) {
+    use tauri::PhysicalPosition;
+
+    let size = match window.outer_size() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let cursor = match window.cursor_position() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => m,
+        _ => return,
+    };
+
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let mon_right = mon_pos.x + mon_size.width as i32;
+    let mon_bottom = mon_pos.y + mon_size.height as i32;
+
+    // カーソルの少し右下に出す (Clipy 風)
+    let mut x = cursor.x as i32 + 8;
+    let mut y = cursor.y as i32 + 8;
+
+    // 画面外にはみ出さないようクランプ
+    if x + size.width as i32 > mon_right {
+        x = mon_right - size.width as i32 - 8;
+    }
+    if y + size.height as i32 > mon_bottom {
+        y = mon_bottom - size.height as i32 - 8;
+    }
+    if x < mon_pos.x { x = mon_pos.x + 8; }
+    if y < mon_pos.y { y = mon_pos.y + 8; }
+
+    let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
 // ---------------------------------------------------------------------------

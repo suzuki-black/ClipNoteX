@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import {
   captureDone,
+  deleteDone,
   exportDoneMarkdown,
   listDone,
   type DoneViewSummary,
@@ -32,6 +33,7 @@ type Action =
   | { type: "SET_CAPTURING"; capturing: boolean }
   | { type: "SET_CAPTURE_INPUT"; value: string }
   | { type: "ITEM_UPDATED"; item: DoneViewSummary }
+  | { type: "REMOVE_ITEM"; id: string }
   | { type: "SET_EXPORT"; text: string | null };
 
 function reducer(state: State, action: Action): State {
@@ -54,6 +56,8 @@ function reducer(state: State, action: Action): State {
       );
       return { ...state, items };
     }
+    case "REMOVE_ITEM":
+      return { ...state, items: state.items.filter((i) => i.id !== action.id) };
     case "SET_EXPORT":
       return { ...state, exportText: action.text };
   }
@@ -117,6 +121,15 @@ export function DoneLog() {
       dispatch({ type: "SET_ERROR", error: String(e) });
     } finally {
       dispatch({ type: "SET_CAPTURING", capturing: false });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteDone(id);
+      dispatch({ type: "REMOVE_ITEM", id });
+    } catch (e) {
+      dispatch({ type: "SET_ERROR", error: String(e) });
     }
   }
 
@@ -211,6 +224,7 @@ export function DoneLog() {
                 onUpdated={(updated) =>
                   dispatch({ type: "ITEM_UPDATED", item: updated })
                 }
+                onDelete={(id) => handleDelete(id)}
               />
             </li>
           ))}

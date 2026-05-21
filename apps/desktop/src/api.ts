@@ -112,3 +112,7 @@ export function updateDoneOverlay(args: UpdateOverlayArgs): Promise<void> {
 export function exportDoneMarkdown(date?: string): Promise<string> {
   return invoke("export_done_markdown", { date });
 }
+
+export function deleteDone(id: string): Promise<void> {
+  return invoke("delete_done", { id });
+}

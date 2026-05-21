@@ -66,10 +66,13 @@ pub async fn list_history(
 #[tauri::command]
 pub async fn paste_item(
     state: State<'_, AppState>,
+    window: tauri::WebviewWindow,
     args: PasteArgs,
 ) -> Result<(), String> {
     use clipnotex_core::model::PayloadData;
     use clipnotex_paste::PasteMode;
+
+    tracing::info!(id = %args.id, mode = %args.mode, "paste_item: ENTRY");
 
     // Fetch item from store to get digest + payloads.
     let id_str = args.id.clone();
@@ -121,11 +124,17 @@ pub async fn paste_item(
             .collect()
     };
 
-    state
-        .paste
-        .paste(payloads, item.digest, mode)
-        .await
-        .map_err(|e| e.to_string())
+    tracing::info!(payloads_n = payloads.len(), "paste_item: hiding window");
+    // Clipy 風挙動: ペースト前にウィンドウを隠す。
+    let r_hide = window.hide();
+    tracing::info!(?r_hide, "paste_item: window.hide returned");
+    // フォーカス遷移に必要な短いウェイト
+    tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+
+    tracing::info!("paste_item: calling paste.paste()");
+    let result = state.paste.paste(payloads, item.digest, mode).await;
+    tracing::info!(ok = result.is_ok(), "paste_item: paste.paste() returned");
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -362,6 +371,20 @@ pub async fn update_done_overlay(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Delete a DONE LOG entry and its overlay.
+#[tauri::command]
+pub async fn delete_done(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let clip_id = parse_clip_id(&id)?;
+    let donelog = state.donelog.clone();
+    tokio::task::spawn_blocking(move || donelog.delete(clip_id))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
 }
 
 /// Export DONE LOG as Markdown for a given date (default: today).

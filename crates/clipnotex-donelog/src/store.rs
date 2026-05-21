@@ -336,6 +336,60 @@ impl DoneLogStore {
     }
 
     // -----------------------------------------------------------------------
+    // Delete operation
+    // -----------------------------------------------------------------------
+
+    /// Delete a DONE LOG entry and its overlay from all three tables atomically.
+    /// Returns `Ok(())` if the entry did not exist (idempotent).
+    pub fn delete(&self, id: ClipId) -> Result<()> {
+        let id_bytes = id.as_bytes();
+
+        // We need captured_at to reconstruct the DONE_BY_DATE composite key.
+        let captured_at = match self.get_captured_at(id)? {
+            Some(ts) => ts,
+            None => return Ok(()), // already absent — idempotent
+        };
+
+        use chrono::{Datelike, Local, TimeZone};
+        let dt = Local
+            .timestamp_millis_opt(captured_at)
+            .single()
+            .unwrap_or_else(|| Local::now());
+        let year_doy = dt.year() * 1000 + dt.ordinal() as i32;
+
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("donelog begin_write: {e}")))?;
+        {
+            let mut entries = write
+                .open_table(DONE_ENTRIES)
+                .map_err(|e| CnxError::Storage(format!("open done_entries: {e}")))?;
+            entries
+                .remove(id_bytes.as_slice())
+                .map_err(|e| CnxError::Storage(format!("remove done_entries: {e}")))?;
+
+            let mut overlays = write
+                .open_table(DONE_OVERLAYS)
+                .map_err(|e| CnxError::Storage(format!("open done_overlays: {e}")))?;
+            overlays
+                .remove(id_bytes.as_slice())
+                .map_err(|e| CnxError::Storage(format!("remove done_overlays: {e}")))?;
+
+            let mut by_date = write
+                .open_table(DONE_BY_DATE)
+                .map_err(|e| CnxError::Storage(format!("open done_by_date: {e}")))?;
+            by_date
+                .remove((year_doy, captured_at, id_bytes.as_slice()))
+                .map_err(|e| CnxError::Storage(format!("remove done_by_date: {e}")))?;
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("donelog commit: {e}")))?;
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
 

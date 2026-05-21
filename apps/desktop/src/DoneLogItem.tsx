@@ -5,9 +5,10 @@ import { updateDoneOverlay } from "./api";
 interface Props {
   item: DoneViewSummary;
   onUpdated: (updated: DoneViewSummary) => void;
+  onDelete: (id: string) => void;
 }
 
-export function DoneLogItem({ item, onUpdated }: Props) {
+export function DoneLogItem({ item, onUpdated, onDelete }: Props) {
   const [editing, setEditing] = useState(false);
   const [noteInput, setNoteInput] = useState(item.note ?? "");
   const [tagInput, setTagInput] = useState("");
@@ -79,6 +80,15 @@ export function DoneLogItem({ item, onUpdated }: Props) {
         <time className="done-item__time">{item.time}</time>
         <span className="done-item__app">{item.source_app}</span>
         <span className="done-item__kind">{item.kind}</span>
+        <button
+          className="done-item__delete-btn"
+          onClick={() => onDelete(item.id)}
+          disabled={saving}
+          aria-label="この記録を削除"
+          title="削除"
+        >
+          🗑
+        </button>
       </header>
 
       <p className="done-item__body">{item.body}</p>
