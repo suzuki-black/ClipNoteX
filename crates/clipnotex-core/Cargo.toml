@@ -16,8 +16,6 @@ ulid        = { workspace = true }
 blake3      = { workspace = true }
 chrono      = { workspace = true }
 arc-swap    = { workspace = true }
-ts-rs       = { workspace = true, optional = true }
 
 [features]
 default = []
-ts-bindings = ["dep:ts-rs"]

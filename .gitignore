@@ -1,42 +1,21 @@
 # Rust
 /target/
-**/*.rs.bk
-Cargo.lock.bak
 
-# Node
-node_modules/
-.pnpm-store/
-dist/
-.next/
-.turbo/
+# Swift Package Manager
+apps/macos/.build/
+apps/macos/.swiftpm/
+apps/macos/Package.resolved
 
-# Tauri
-apps/desktop/src-tauri/target/
-apps/desktop/src-tauri/Cargo.lock
+# Generated FFI header (regenerated each build)
+crates/clipnotex-ffi/include/
 
-# IDE / OS
+# OS
+.DS_Store
+
+# IDE
 .idea/
 .vscode/
-.DS_Store
-Thumbs.db
-*.swp
+*.iml
 
-# Logs / local state
+# Logs
 *.log
-/.dev-data/
-/coverage/
-
-# Secrets
-.env
-.env.local
-*.p12
-*.pfx
-*.cer
-notarize.json
-
-# Generated bindings
-/apps/desktop/src/types/generated/
-
-# TypeScript compiled output (*.js next to *.tsx source files)
-apps/desktop/src/*.js
-apps/desktop/src/**/*.js

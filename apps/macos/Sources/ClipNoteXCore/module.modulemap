@@ -1,0 +1,5 @@
+module ClipNoteXCore {
+    header "ClipNoteX.h"
+    link "clipnotex_ffi"
+    export *
+}

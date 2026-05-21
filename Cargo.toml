@@ -9,8 +9,7 @@ members = [
     "crates/clipnotex-format",
     "crates/clipnotex-donelog",
     "crates/clipnotex-app",
-    "crates/clipnotex-tauri",
-    "apps/desktop/src-tauri",
+    "crates/clipnotex-ffi",
     "tools/devcli",
 ]
 
@@ -70,10 +69,8 @@ tray-icon       = "0.19"
 enigo           = "0.3"
 image           = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
-# tauri
-tauri           = { version = "2", features = ["tray-icon"] }
-tauri-build     = { version = "2" }
-ts-rs           = { version = "10", features = ["serde-compat", "chrono-impl"] }
+# FFI
+libc            = "0.2"
 
 # macOS-specific (declared here so crates can use workspace = true)
 objc2            = "0.5"

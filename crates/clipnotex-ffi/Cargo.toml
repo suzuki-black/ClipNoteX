@@ -1,0 +1,40 @@
+[package]
+name        = "clipnotex-ffi"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+homepage    = { workspace = true }
+description = "C ABI layer for Swift/AppKit (macOS) and other native frontends."
+
+[lib]
+# Generate both:
+#   - libclipnotex_ffi.a   (Swift link / Xcode)
+#   - libclipnotex_ffi.dylib (loadable)
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+clipnotex-core      = { workspace = true }
+clipnotex-clipboard = { workspace = true }
+clipnotex-store     = { workspace = true }
+clipnotex-hotkey    = { workspace = true }
+clipnotex-paste     = { workspace = true }
+clipnotex-format    = { workspace = true }
+clipnotex-donelog   = { workspace = true }
+clipnotex-app       = { workspace = true }
+
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+tokio       = { workspace = true }
+chrono      = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+ulid        = { workspace = true }
+parking_lot = { workspace = true }
+once_cell   = { workspace = true }
+
+libc        = { workspace = true }
+
+[build-dependencies]
+cbindgen = "0.27"
