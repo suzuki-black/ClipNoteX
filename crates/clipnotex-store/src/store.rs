@@ -384,6 +384,10 @@ impl StoreService {
 
             results.push(item);
         }
+        // Pinned items always sort to the top, preserving recency within
+        // each group. Stable sort keeps the original BY_TIME order intact
+        // for ties.
+        results.sort_by(|a, b| b.pinned.cmp(&a.pinned));
         Ok(results)
     }
 

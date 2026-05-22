@@ -39,11 +39,14 @@ final class DoneLogWindow: NSWindowController, NSWindowDelegate, NSTableViewData
         i.reload()
     }
 
-    private var items: [DoneItem] = []
+    private var items: [DoneItem] = []         // フィルタ後 (表示用)
+    private var allItems: [DoneItem] = []      // ロード結果 (検索ソース)
     private var selectedDate: String = "" // 初期値は init() で today を入れる
+    private var filterText: String = ""
 
     private let datePicker = NSDatePicker()
     private let countLabel = NSTextField(labelWithString: "0 件")
+    private let searchBar = NSSearchField()
     private let table = NSTableView()
     private let noteField = NSTextField()
     private let tagField = NSTextField()
@@ -91,9 +94,17 @@ final class DoneLogWindow: NSWindowController, NSWindowDelegate, NSTableViewData
         let exportBtn = NSButton(title: "MD エクスポート", target: self, action: #selector(exportMarkdown))
         exportBtn.bezelStyle = .rounded
 
+        searchBar.placeholderString = "Search body / note / tag…"
+        searchBar.target = self
+        searchBar.action = #selector(searchChanged)
+        searchBar.sendsSearchStringImmediately = true
+        searchBar.sendsWholeSearchString = false
+        searchBar.widthAnchor.constraint(equalToConstant: 220).isActive = true
+
         toolbar.addArrangedSubview(datePicker)
         toolbar.addArrangedSubview(todayBtn)
         toolbar.addArrangedSubview(countLabel)
+        toolbar.addArrangedSubview(searchBar)
         toolbar.addArrangedSubview(NSView()) // spacer
         toolbar.addArrangedSubview(exportBtn)
         content.addSubview(toolbar)
@@ -207,24 +218,45 @@ final class DoneLogWindow: NSWindowController, NSWindowDelegate, NSTableViewData
         guard let json,
               let str = String(validatingUTF8: json),
               let data = str.data(using: .utf8) else {
-            items = []
-            table.reloadData()
-            countLabel.stringValue = "0 件"
+            allItems = []
+            applyFilter()
             return
         }
         do {
-            items = try JSONDecoder().decode([DoneItem].self, from: data)
+            allItems = try JSONDecoder().decode([DoneItem].self, from: data)
         } catch {
             NSLog("DoneLog decode: \(error)")
-            items = []
+            allItems = []
         }
-        countLabel.stringValue = "\(items.count) 件"
+        applyFilter()
+    }
+
+    private func applyFilter() {
+        let q = filterText.lowercased()
+        if q.isEmpty {
+            items = allItems
+        } else {
+            items = allItems.filter { item in
+                item.body.lowercased().contains(q)
+                    || (item.note?.lowercased().contains(q) ?? false)
+                    || item.tags.contains(where: { $0.lowercased().contains(q) })
+                    || item.source_app.lowercased().contains(q)
+            }
+        }
+        countLabel.stringValue = filterText.isEmpty
+            ? "\(items.count) 件"
+            : "\(items.count) / \(allItems.count) 件"
         table.reloadData()
         if !items.isEmpty {
             table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         } else {
             clearDetail()
         }
+    }
+
+    @objc private func searchChanged() {
+        filterText = searchBar.stringValue
+        applyFilter()
     }
 
     // MARK: Actions

@@ -73,7 +73,7 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         col.width = 460
         table.addTableColumn(col)
 
-        let hint = NSTextField(labelWithString: "↑↓ navigate · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · 1–9 quick · ⎋ close")
+        let hint = NSTextField(labelWithString: "↑↓ nav · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · ⌘P pin · ⌘⌫ delete · 1–9 quick · ⎋ close")
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = .secondaryLabelColor
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -172,6 +172,36 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
                 NSLog("paste_item failed: \(String(cString: msg))")
                 cnx_free_string(msg)
             }
+        }
+    }
+
+    /// 選択アイテムのピン留めをトグルし、リスト再読込。
+    fileprivate func togglePinSelected() {
+        guard let item = currentItem() else { return }
+        _ = item.id.withCString { cstr in cnx_pin_toggle(cstr) }
+        // 同じ id を選択し続けるためにスクロール位置を保つ
+        let prevId = item.id
+        reload(query: searchField.stringValue)
+        if let row = items.firstIndex(where: { $0.id == prevId }) {
+            table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            table.scrollRowToVisible(row)
+        }
+    }
+
+    /// 選択アイテムを削除し、リスト再読込。
+    fileprivate func deleteSelected() {
+        guard let item = currentItem() else { return }
+        let r = item.id.withCString { cstr in cnx_delete_item(cstr) }
+        if r != 0, let msg = cnx_last_error() {
+            NSLog("delete_item failed: \(String(cString: msg))")
+            cnx_free_string(msg)
+        }
+        let prevRow = table.selectedRow
+        reload(query: searchField.stringValue)
+        // 削除後は同じ位置 (もしくは末尾) を選択
+        if !items.isEmpty {
+            let next = max(0, min(prevRow, items.count - 1))
+            table.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
         }
     }
 
@@ -358,13 +388,30 @@ final class NonActivatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        // Esc で閉じる
-        if event.keyCode == 53 { // kVK_Escape
+        if event.keyCode == 53 { // Esc
             SearchPanel.shared.hide()
             return
         }
-        // 数字キーで即ペースト (検索欄が非フォーカスのとき)
+        // 数字キー即ペースト (検索欄非フォーカス時)
         if SearchPanel.shared.handleQuickPasteKey(event) { return }
         super.keyDown(with: event)
+    }
+
+    /// ⌘ 系ショートカットは検索欄にフォーカスがあっても拾う必要があるため
+    /// performKeyEquivalent をオーバーライド。
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods == .command {
+            switch event.keyCode {
+            case 51: // kVK_Delete (Backspace)
+                SearchPanel.shared.deleteSelected()
+                return true
+            case 35: // kVK_ANSI_P
+                SearchPanel.shared.togglePinSelected()
+                return true
+            default: break
+            }
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
