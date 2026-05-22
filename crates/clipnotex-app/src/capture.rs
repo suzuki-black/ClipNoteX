@@ -2,11 +2,16 @@ use crate::exclusion::ExclusionFilter;
 use clipnotex_clipboard::ClipboardWatcher;
 use clipnotex_core::{
     bus::{CoreEvent, EventBus, SkipReason},
-    model::{ClipItem, ClipKind, PayloadData},
+    model::{ClipItem, ClipKind, Compression, PayloadData, PayloadRef, PayloadStorage},
     ClipId, Result,
 };
 use clipnotex_store::StoreService;
 use std::sync::Arc;
+
+/// Inline で保存する 1 payload あたりの上限。これを超えた payload は捨てる
+/// (v0.3 で BlobStore に振り分け予定)。
+/// 暗号化済みストア (redb) の肥大化を避けるための妥協値。
+const INLINE_PAYLOAD_CAP: usize = 1 * 1024 * 1024; // 1 MiB
 
 pub async fn run_capture_loop(
     mut watcher: Box<dyn ClipboardWatcher>,
@@ -46,13 +51,35 @@ fn build_clip_item(captured: &clipnotex_clipboard::CapturedItem) -> ClipItem {
         .and_then(|p| std::str::from_utf8(&p.bytes).ok())
         .map(|s| s.chars().take(256).collect::<String>());
     let total: u64 = captured.payloads.iter().map(|p| p.bytes.len() as u64).sum();
+
+    // 各 payload を ClipItem に Inline 保存する (画像・RTF 等のバイナリも保持)。
+    // INLINE_PAYLOAD_CAP を超えるものは保存をスキップ (v0.3 で BlobStore へ)。
+    let payloads: Vec<PayloadRef> = captured
+        .payloads
+        .iter()
+        .filter(|p| !p.bytes.is_empty() && p.bytes.len() <= INLINE_PAYLOAD_CAP)
+        .map(|p| PayloadRef {
+            format_id: p.format_id.clone(),
+            compression: Compression::None,
+            storage: PayloadStorage::Inline(p.bytes.clone()),
+            raw_size: p.bytes.len() as u64,
+        })
+        .collect();
+
+    if payloads.len() < captured.payloads.len() {
+        tracing::warn!(
+            dropped = captured.payloads.len() - payloads.len(),
+            "some payloads exceeded {INLINE_PAYLOAD_CAP} bytes and were not stored"
+        );
+    }
+
     ClipItem {
         id: ClipId::new(),
         created_at: captured.captured_at,
         updated_at: captured.captured_at,
         source_app: captured.source_app.clone(),
         primary_kind: captured.primary_kind,
-        payloads: vec![],
+        payloads,
         digest: captured.digest,
         text_preview: preview,
         pinned: false,
