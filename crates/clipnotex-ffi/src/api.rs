@@ -9,7 +9,7 @@ use clipnotex_app::{run_capture_loop, QuotaManager};
 use clipnotex_core::{
     bus::CoreEvent,
     ids::HotkeyId,
-    model::{PayloadData, PayloadStorage},
+    model::PayloadData,
     ClipId,
 };
 use clipnotex_donelog::{CaptureRequest, ContentKind, DoneOverlay, DoneView};
@@ -161,6 +161,7 @@ pub unsafe extern "C" fn cnx_paste_item(id: *const c_char, mode: i32) -> i32 {
     let id_str_for_bump = id_str.clone();
 
     let store = st.store.clone();
+    let store_for_materialize = st.store.clone();
     let paste = st.paste.clone();
     let id_for_lookup = id_str.clone();
 
@@ -186,27 +187,20 @@ pub unsafe extern "C" fn cnx_paste_item(id: *const c_char, mode: i32) -> i32 {
             _ => PasteMode::Normal,
         };
 
-        let payloads: Vec<PayloadData> = if item.payloads.is_empty() {
-            let text = item
-                .text_preview
-                .clone()
-                .ok_or_else(|| "no payload".to_string())?;
-            vec![PayloadData {
-                format_id: "public.utf8-plain-text".into(),
-                bytes: text.into_bytes(),
-            }]
-        } else {
-            item.payloads
-                .iter()
-                .filter_map(|p| match &p.storage {
-                    PayloadStorage::Inline(bytes) => Some(PayloadData {
-                        format_id: p.format_id.clone(),
-                        bytes: bytes.clone(),
-                    }),
-                    _ => None,
-                })
-                .collect()
-        };
+        // Inline + Blob 両方を実バイトに展開 (BlobStore 経由読み込みも含む)
+        let mut payloads = store_for_materialize
+            .materialize_payloads(&item)
+            .map_err(|e| format!("materialize: {e}"))?;
+        if payloads.is_empty() {
+            if let Some(text) = item.text_preview.clone() {
+                payloads.push(PayloadData {
+                    format_id: "public.utf8-plain-text".into(),
+                    bytes: text.into_bytes(),
+                });
+            } else {
+                return Err("no payload available".into());
+            }
+        }
 
         paste
             .paste(payloads, item.digest, mode)
@@ -554,6 +548,45 @@ pub unsafe extern "C" fn cnx_export_done_markdown(date: *const c_char) -> *mut c
     };
     let md = clipnotex_donelog::export::to_markdown(d, &views);
     into_c_string(md)
+}
+
+// ---------------------------------------------------------------------------
+// Settings (runtime mutable)
+// ---------------------------------------------------------------------------
+
+/// Update the history retention cap (max items kept in encrypted store).
+/// Returns 0 on success, negative on error.
+/// Note: takes effect on the *next* capture; existing items beyond the cap
+/// will be evicted in the next QuotaManager pass.
+#[no_mangle]
+pub extern "C" fn cnx_set_history_quota(max_items: u64) -> i32 {
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return CnxStatus::NotInitialized as i32;
+        }
+    };
+    if max_items == 0 {
+        set_last_error("max_items must be > 0");
+        return CnxStatus::InvalidArgument as i32;
+    }
+    st.settings.lock().history.max_items = max_items;
+    tracing::info!(max_items, "history quota updated");
+    // Run an eviction sweep immediately so the change is visible.
+    let quota = QuotaManager::new(st.store.clone(), st.settings.lock().history.clone());
+    if let Err(e) = quota.enforce() {
+        tracing::warn!(?e, "immediate eviction sweep failed");
+    }
+    CnxStatus::Ok as i32
+}
+
+/// Get current history quota (max items). 0 means "not initialized".
+#[no_mangle]
+pub extern "C" fn cnx_get_history_quota() -> u64 {
+    state::state()
+        .map(|s| s.settings.lock().history.max_items)
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------

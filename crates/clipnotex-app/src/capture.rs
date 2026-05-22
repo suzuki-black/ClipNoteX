@@ -8,10 +8,11 @@ use clipnotex_core::{
 use clipnotex_store::StoreService;
 use std::sync::Arc;
 
-/// Inline で保存する 1 payload あたりの上限。これを超えた payload は捨てる
-/// (v0.3 で BlobStore に振り分け予定)。
-/// 暗号化済みストア (redb) の肥大化を避けるための妥協値。
-const INLINE_PAYLOAD_CAP: usize = 1 * 1024 * 1024; // 1 MiB
+/// キャプチャ時点での 1 payload あたりの上限。
+/// この上限を超える payload (例: 巨大な PDF) はメモリ・ディスクの両方で
+/// 重いので破棄する。BlobStore があっても無制限ではない。
+/// 256 KiB を超えたものは store 側で自動的に BlobStore にオフロードされる。
+const MAX_PAYLOAD_BYTES: usize = 50 * 1024 * 1024; // 50 MiB
 
 pub async fn run_capture_loop(
     mut watcher: Box<dyn ClipboardWatcher>,
@@ -52,12 +53,12 @@ fn build_clip_item(captured: &clipnotex_clipboard::CapturedItem) -> ClipItem {
         .map(|s| s.chars().take(256).collect::<String>());
     let total: u64 = captured.payloads.iter().map(|p| p.bytes.len() as u64).sum();
 
-    // 各 payload を ClipItem に Inline 保存する (画像・RTF 等のバイナリも保持)。
-    // INLINE_PAYLOAD_CAP を超えるものは保存をスキップ (v0.3 で BlobStore へ)。
+    // 各 payload を ClipItem に Inline で詰める。store::add_item 側で
+    // BLOB_OFFLOAD_THRESHOLD (256 KiB) 超のものは BlobStore に自動退避される。
     let payloads: Vec<PayloadRef> = captured
         .payloads
         .iter()
-        .filter(|p| !p.bytes.is_empty() && p.bytes.len() <= INLINE_PAYLOAD_CAP)
+        .filter(|p| !p.bytes.is_empty() && p.bytes.len() <= MAX_PAYLOAD_BYTES)
         .map(|p| PayloadRef {
             format_id: p.format_id.clone(),
             compression: Compression::None,
@@ -69,7 +70,8 @@ fn build_clip_item(captured: &clipnotex_clipboard::CapturedItem) -> ClipItem {
     if payloads.len() < captured.payloads.len() {
         tracing::warn!(
             dropped = captured.payloads.len() - payloads.len(),
-            "some payloads exceeded {INLINE_PAYLOAD_CAP} bytes and were not stored"
+            cap = MAX_PAYLOAD_BYTES,
+            "some payloads exceeded MAX_PAYLOAD_BYTES and were dropped"
         );
     }
 

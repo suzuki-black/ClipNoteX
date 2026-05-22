@@ -89,6 +89,19 @@ int32_t cnx_update_done_overlay_json(const char *args_json);
 char *cnx_export_done_markdown(const char *date);
 
 /**
+ * Update the history retention cap (max items kept in encrypted store).
+ * Returns 0 on success, negative on error.
+ * Note: takes effect on the *next* capture; existing items beyond the cap
+ * will be evicted in the next QuotaManager pass.
+ */
+int32_t cnx_set_history_quota(uint64_t max_items);
+
+/**
+ * Get current history quota (max items). 0 means "not initialized".
+ */
+uint64_t cnx_get_history_quota(void);
+
+/**
  * Format text without pasting.
  * `text`     : UTF-8 source.
  * `lang`     : "auto" | "json" | "sql" | "markdown" | "plain" | "html" | ... (or null).

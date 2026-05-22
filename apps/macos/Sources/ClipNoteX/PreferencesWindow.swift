@@ -62,21 +62,57 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
 
     // MARK: - General
 
+    private var quotaField: NSTextField?
+    private var quotaStepper: NSStepper?
+    private var launchAtLoginCheck: NSButton?
+
     private func generalView() -> NSView {
         let v = NSView()
         let title = NSTextField(labelWithString: "Clipboard history")
         title.font = .systemFont(ofSize: 13, weight: .semibold)
 
         let quotaLbl = NSTextField(labelWithString: "Maximum items kept:")
-        let quotaValue = NSTextField(labelWithString: "1,000 (default)")
-        quotaValue.textColor = .secondaryLabelColor
+        let field = NSTextField()
+        field.alignment = .right
+        field.formatter = NumberFormatter()
+        field.intValue = Int32(Settings.historyQuota)
+        field.target = self
+        field.action = #selector(quotaChanged)
+        field.widthAnchor.constraint(equalToConstant: 80).isActive = true
+        quotaField = field
+
+        let stepper = NSStepper()
+        stepper.minValue = 50
+        stepper.maxValue = 50_000
+        stepper.increment = 50
+        stepper.integerValue = Settings.historyQuota
+        stepper.target = self
+        stepper.action = #selector(stepperChanged)
+        quotaStepper = stepper
 
         let info = NSTextField(wrappingLabelWithString:
-            "Older items are evicted automatically when the cap is reached. Pinned items survive eviction. Editing the cap is coming in v0.3.")
+            "Older items are evicted automatically when the cap is reached. Pinned items survive eviction. Range: 50–50,000.")
         info.textColor = .secondaryLabelColor
         info.font = .systemFont(ofSize: 11)
 
-        let stack = NSStackView(views: [title, hRow(quotaLbl, quotaValue), info])
+        let appTitle = NSTextField(labelWithString: "Startup")
+        appTitle.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        let launchCheck = NSButton(checkboxWithTitle: "Launch at login",
+                                   target: self,
+                                   action: #selector(launchAtLoginToggled))
+        launchCheck.state = Settings.launchAtLogin ? .on : .off
+        launchAtLoginCheck = launchCheck
+
+        let quotaRow = NSStackView(views: [quotaLbl, field, stepper])
+        quotaRow.orientation = .horizontal
+        quotaRow.spacing = 6
+
+        let stack = NSStackView(views: [
+            title, quotaRow, info,
+            NSBox.separator(),
+            appTitle, launchCheck,
+        ])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -85,6 +121,23 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         v.addSubview(stack)
         pin(stack, to: v)
         return v
+    }
+
+    @objc private func quotaChanged() {
+        let v = Int(quotaField?.intValue ?? 1000)
+        Settings.historyQuota = v
+        quotaStepper?.integerValue = Settings.historyQuota
+        quotaField?.intValue = Int32(Settings.historyQuota) // clamped
+    }
+
+    @objc private func stepperChanged() {
+        let v = quotaStepper?.integerValue ?? 1000
+        Settings.historyQuota = v
+        quotaField?.intValue = Int32(Settings.historyQuota)
+    }
+
+    @objc private func launchAtLoginToggled() {
+        Settings.launchAtLogin = (launchAtLoginCheck?.state == .on)
     }
 
     // MARK: - Shortcuts

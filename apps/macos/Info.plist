@@ -14,6 +14,8 @@
     <string>ClipNoteX</string>
     <key>CFBundleDisplayName</key>
     <string>ClipNoteX</string>
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

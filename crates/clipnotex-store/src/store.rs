@@ -3,13 +3,18 @@ use crate::blobs::BlobStore;
 use crate::migrations::apply_pending;
 use crate::tables::{BY_DIGEST, BY_TIME, ITEMS};
 use clipnotex_core::{
-    model::{ClipItem, PayloadData},
+    model::{BlobId, ClipItem, PayloadData, PayloadStorage},
     CnxError, ClipId, Result,
 };
 use redb::{Database, ReadableTable};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// ClipItem 内に直接埋め込む上限。これを超える payload は BlobStore に
+/// オフロードされ、ClipItem には BlobId のみが残る。
+/// 暗号化済み redb の B-Tree が肥大化するのを防ぐための閾値。
+pub const BLOB_OFFLOAD_THRESHOLD: usize = 256 * 1024; // 256 KiB
 
 pub struct StoreService {
     db: Arc<Database>,
@@ -47,6 +52,9 @@ impl StoreService {
         let started = Instant::now();
         let id_bytes = item.id.as_bytes();
         let digest = item.digest;
+
+        // 大きな Inline payload は BlobStore に振り分けて ClipItem から外す。
+        self.offload_large_payloads(&mut item)?;
 
         // De-dup probe in a short read tx.
         if let Some(existing) = self.lookup_by_digest(&digest)? {
@@ -539,7 +547,58 @@ impl StoreService {
     pub fn db(&self) -> &Database {
         &self.db
     }
+
+    // -----------------------------------------------------------------------
+    // Blob offload / expand
+    // -----------------------------------------------------------------------
+
+    /// Scan `item.payloads` and move any `Inline(bytes)` larger than
+    /// [`BLOB_OFFLOAD_THRESHOLD`] into the [`BlobStore`], replacing the
+    /// storage variant with `Blob(BlobId)`. The blob file is encrypted with
+    /// the history sealer using the BlobId itself as AAD (binds the
+    /// ciphertext to the address).
+    fn offload_large_payloads(&self, item: &mut ClipItem) -> Result<()> {
+        for p in item.payloads.iter_mut() {
+            if let PayloadStorage::Inline(bytes) = &p.storage {
+                if bytes.len() > BLOB_OFFLOAD_THRESHOLD {
+                    let id = BlobId(blake3::hash(bytes).into());
+                    if !self.blobs.path(&id).exists() {
+                        let sealed = self.history_sealer.seal(bytes, &id.0)?;
+                        self.blobs.write(&id, &sealed)?;
+                    }
+                    p.storage = PayloadStorage::Blob(id);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Inverse of `offload_large_payloads`: materialise every payload back
+    /// to raw bytes so callers (e.g. the paste pipeline) can write them
+    /// straight to the OS clipboard.
+    pub fn materialize_payloads(&self, item: &ClipItem) -> Result<Vec<PayloadData>> {
+        let mut out = Vec::with_capacity(item.payloads.len());
+        for p in &item.payloads {
+            let bytes = match &p.storage {
+                PayloadStorage::Inline(b) => b.clone(),
+                PayloadStorage::Blob(id) => {
+                    let sealed = self.blobs.read(id)?;
+                    self.history_sealer.open(&sealed, &id.0)?
+                }
+                PayloadStorage::Pack { .. } => {
+                    // Reserved for v0.3+ pack files; treat as empty for now.
+                    continue;
+                }
+            };
+            out.push(PayloadData {
+                format_id: p.format_id.clone(),
+                bytes,
+            });
+        }
+        Ok(out)
+    }
 }
+
 
 #[cfg(test)]
 mod tests {

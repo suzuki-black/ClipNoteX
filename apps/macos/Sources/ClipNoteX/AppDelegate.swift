@@ -29,7 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSLog("ClipNoteX: core initialized at \(dataDir)")
 
-        // 2) クリップボード監視ループ開始
+        // 2) 永続化設定 (UserDefaults) を core に push
+        Settings.pushToCore()
+
+        // 3) クリップボード監視ループ開始
         _ = cnx_start_capture_loop()
 
         // 3) ホットキー (バックグラウンドからの呼び出し可)
