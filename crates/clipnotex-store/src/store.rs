@@ -124,6 +124,63 @@ impl StoreService {
         Ok(())
     }
 
+    /// Bump an item's `created_at` to "now" so that it sorts to the top of
+    /// `list_recent`. This is Clipy-compatible behaviour: pasting a history
+    /// entry promotes it to the most-recent slot.
+    ///
+    /// Implementation:
+    ///   1. Decrypt with the OLD created_at AAD
+    ///   2. Rewrite created_at + updated_at = now
+    ///   3. Re-seal with the NEW AAD
+    ///   4. Replace in ITEMS, remove old BY_TIME row, insert new BY_TIME row
+    pub fn bump_to_top(&self, id: ClipId) -> Result<()> {
+        let id_bytes = id.as_bytes();
+
+        // 1) Find the existing entry and its current created_at via BY_TIME scan
+        //    (get_item already does this; reuse it for the heavy lifting).
+        let mut item = match self.get_item(id)? {
+            Some(i) => i,
+            None => return Ok(()), // gone
+        };
+        let old_created_at = item.created_at;
+        let now = chrono::Utc::now().timestamp_millis();
+
+        // Re-seal with new AAD.
+        item.created_at = now;
+        item.updated_at = now;
+        let serialized = bincode::serialize(&item)
+            .map_err(|e| CnxError::Serialize(e.to_string()))?;
+        let new_aad = now.to_be_bytes();
+        let new_sealed = self.history_sealer.seal(&serialized, &new_aad)?;
+
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        {
+            let mut items_tbl = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            items_tbl
+                .insert(id_bytes.as_slice(), new_sealed.as_slice())
+                .map_err(|e| CnxError::Storage(format!("insert items: {e}")))?;
+
+            let mut by_time = write
+                .open_table(BY_TIME)
+                .map_err(|e| CnxError::Storage(format!("open by_time: {e}")))?;
+            by_time
+                .remove((old_created_at, id_bytes.as_slice()))
+                .map_err(|e| CnxError::Storage(format!("remove old by_time: {e}")))?;
+            by_time
+                .insert((now, id_bytes.as_slice()), ())
+                .map_err(|e| CnxError::Storage(format!("insert by_time: {e}")))?;
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+        Ok(())
+    }
+
     /// Fetch and decrypt a single item by its ULID.
     /// Returns `None` if the item doesn't exist.
     pub fn get_item(&self, id: ClipId) -> Result<Option<ClipItem>> {

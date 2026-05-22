@@ -65,7 +65,7 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         table.headerView = nil
         table.allowsMultipleSelection = false
         table.usesAlternatingRowBackgroundColors = true
-        table.rowHeight = 28
+        table.rowHeight = 38
         table.target = self
         table.doubleAction = #selector(rowDoubleClicked)
 
@@ -259,26 +259,54 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         let cell = NSTableCellView()
         cell.translatesAutoresizingMaskIntoConstraints = false
 
+        // 番号 (1〜9)
         let idx = NSTextField(labelWithString: row < 9 ? "\(row + 1)" : " ")
         idx.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         idx.textColor = .secondaryLabelColor
         idx.alignment = .right
+        idx.widthAnchor.constraint(equalToConstant: 16).isActive = true
 
-        let preview = NSTextField(labelWithString: item.preview.replacingOccurrences(of: "\n", with: " "))
+        // 種別アイコン (絵文字でシンプルに)
+        let kindIcon = NSTextField(labelWithString: Self.kindEmoji(item.kind))
+        kindIcon.font = .systemFont(ofSize: 13)
+        kindIcon.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        kindIcon.toolTip = item.kind
+
+        // プレビュー (本文) — 上段
+        let displayText: String = {
+            if item.preview.isEmpty {
+                // バイナリ系 (Image/PDF/Files) は preview なしのことがある
+                return "(\(item.kind))"
+            }
+            return item.preview.replacingOccurrences(of: "\n", with: " ")
+        }()
+        let preview = NSTextField(labelWithString: displayText)
         preview.lineBreakMode = .byTruncatingTail
         preview.font = .systemFont(ofSize: 12)
+        preview.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        if item.pinned {
+            preview.stringValue = "📌 " + preview.stringValue
+        }
 
-        let source = NSTextField(labelWithString: item.source_app)
-        source.font = .systemFont(ofSize: 10)
-        source.textColor = .secondaryLabelColor
+        // メタ情報 (右下): ソースアプリ · 経過時間
+        let metaText = "\(item.source_app) · \(Self.relativeTime(from: item.created_at))"
+        let meta = NSTextField(labelWithString: metaText)
+        meta.font = .systemFont(ofSize: 10)
+        meta.textColor = .secondaryLabelColor
+        meta.lineBreakMode = .byTruncatingTail
 
-        let h = NSStackView(views: [idx, preview, source])
+        // 縦に preview / meta を積む
+        let textStack = NSStackView(views: [preview, meta])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 1
+        textStack.distribution = .fill
+
+        let h = NSStackView(views: [idx, kindIcon, textStack])
         h.orientation = .horizontal
         h.spacing = 8
         h.alignment = .centerY
         h.translatesAutoresizingMaskIntoConstraints = false
-        idx.widthAnchor.constraint(equalToConstant: 16).isActive = true
-        source.widthAnchor.constraint(lessThanOrEqualToConstant: 100).isActive = true
 
         cell.addSubview(h)
         NSLayoutConstraint.activate([
@@ -288,6 +316,31 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         ])
         cell.textField = preview
         return cell
+    }
+
+    /// Rust 側 `ClipKind` の Debug 表記を絵文字に。
+    private static func kindEmoji(_ kind: String) -> String {
+        switch kind {
+        case "Text":   return "📝"
+        case "Image":  return "🖼"
+        case "Rtf":    return "🅡"
+        case "Html":   return "🌐"
+        case "Pdf":    return "📄"
+        case "Files":  return "📁"
+        default:        return "•"
+        }
+    }
+
+    /// "5s" / "12m" / "3h" / "2d" 等の短い相対時刻表現。
+    private static func relativeTime(from ms: Int64) -> String {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let diff = max(0, now - ms) / 1000 // sec
+        switch diff {
+        case 0..<60:      return "\(diff)s"
+        case 60..<3600:   return "\(diff / 60)m"
+        case 3600..<86400: return "\(diff / 3600)h"
+        default:           return "\(diff / 86400)d"
+        }
     }
 
     // MARK: - Window delegate (auto-hide)

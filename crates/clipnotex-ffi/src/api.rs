@@ -158,16 +158,18 @@ pub unsafe extern "C" fn cnx_paste_item(id: *const c_char, mode: i32) -> i32 {
             return CnxStatus::InvalidArgument as i32;
         }
     };
+    let id_str_for_bump = id_str.clone();
 
     let store = st.store.clone();
     let paste = st.paste.clone();
+    let id_for_lookup = id_str.clone();
 
     let result = rt().block_on(async move {
         // Locate item
         let item = tokio::task::spawn_blocking(move || {
             store
                 .list_recent(200, None)
-                .map(|v| v.into_iter().find(|i| i.id.to_string() == id_str))
+                .map(|v| v.into_iter().find(|i| i.id.to_string() == id_for_lookup))
         })
         .await
         .map_err(|e| format!("join: {e}"))?
@@ -213,7 +215,16 @@ pub unsafe extern "C" fn cnx_paste_item(id: *const c_char, mode: i32) -> i32 {
     });
 
     match result {
-        Ok(_) => CnxStatus::Ok as i32,
+        Ok(_) => {
+            // Clipy 互換: ペースト成功したら履歴の先頭にこのアイテムを移動。
+            // 失敗しても致命的ではないので warn だけ。
+            if let Ok(ulid) = id_str_for_bump.parse::<Ulid>() {
+                if let Err(e) = st.store.bump_to_top(ClipId(ulid)) {
+                    tracing::warn!(?e, "bump_to_top failed (non-fatal)");
+                }
+            }
+            CnxStatus::Ok as i32
+        }
         Err(e) => {
             set_last_error(e);
             CnxStatus::ClipboardError as i32
