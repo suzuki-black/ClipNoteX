@@ -65,7 +65,6 @@ keyring     = "3"
 # clipboard / OS
 arboard         = "3"
 global-hotkey   = "0.6"
-tray-icon       = "0.19"
 enigo           = "0.3"
 image           = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 

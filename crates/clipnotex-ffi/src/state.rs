@@ -26,6 +26,9 @@ pub(crate) struct AppState {
     pub store: Arc<StoreService>,
     pub donelog: Arc<DoneLogStore>,
     pub filter: Arc<ExclusionFilter>,
+    /// Kept alive: the writer + watcher share this guard; dropping it would
+    /// disable self-write filtering. Direct reads happen via paste controller.
+    #[allow(dead_code)]
     pub guard: Arc<SelfWriteGuard>,
     pub paste: Arc<PasteController>,
     pub hotkey: Option<Arc<HotkeyService>>,
