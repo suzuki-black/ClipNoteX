@@ -245,12 +245,37 @@ fn try_unicode_keystroke(text: &str) -> Result<()> {
     Ok(())
 }
 
+// ペースト用 Enigo を thread_local でキャッシュ。
+//
+// ❌ 旧: 毎回 Enigo::new() → AXIsProcessTrustedWithOptions / CGEventSource 初期化が
+//    走り、未許可状態で毎回「アクセシビリティを許可」ダイアログが出ていた。
+// ✅ 新: 各 worker thread に 1 個キャッシュ。Enigo は !Sync なので
+//    thread_local が正解 (Mutex<Enigo> はコンパイルエラー)。
+//    tokio の worker は数本に収束するので実質的に "1〜数個" の Enigo で済む。
+use std::cell::RefCell;
+thread_local! {
+    static ENIGO: RefCell<Option<enigo::Enigo>> = const { RefCell::new(None) };
+}
+
 fn synthesize_paste_keystroke() -> Result<()> {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-    tracing::info!("synthesize_paste_keystroke: creating Enigo");
-    let mut e = Enigo::new(&Settings::default())
-        .map_err(|e| CnxError::Paste(format!("enigo init: {e}")))?;
-    tracing::info!("synthesize_paste_keystroke: Enigo ready");
+    use enigo::{Enigo, Settings};
+
+    ENIGO.with(|cell| -> Result<()> {
+        let mut guard = cell.borrow_mut();
+        if guard.is_none() {
+            tracing::info!("synthesize_paste_keystroke: initializing thread-local Enigo");
+            let e = Enigo::new(&Settings::default())
+                .map_err(|e| CnxError::Paste(format!("enigo init: {e}")))?;
+            *guard = Some(e);
+        }
+        let e = guard.as_mut().unwrap();
+        send_paste(e)
+    })
+}
+
+fn send_paste(e: &mut enigo::Enigo) -> Result<()> {
+    use enigo::{Direction, Key, Keyboard};
+
     #[cfg(target_os = "macos")]
     let modifier = Key::Meta;
     #[cfg(target_os = "windows")]
@@ -259,11 +284,9 @@ fn synthesize_paste_keystroke() -> Result<()> {
     let modifier = Key::Control;
 
     // ⚠️ クラッシュ防止 (macOS):
-    //   Key::Unicode('v') を使うと enigo 内部で `TSMGetInputSourceProperty`
-    //   (現在のキーボードレイアウトから 'v' のキーコードを引く API) が呼ばれる。
-    //   この API は main dispatch queue からしか呼べないため、tokio worker
-    //   からのペースト呼び出しで dispatch_assert_queue_fail → SIGTRAP で死ぬ。
-    //   → 物理キーコードを直接指定して TSM を経由しない経路に切り替える。
+    //   Key::Unicode('v') を使うと enigo 内部で TSMGetInputSourceProperty が
+    //   呼ばれ、main dispatch queue 外だと dispatch_assert で SIGTRAP になる。
+    //   → 物理キーコードを直接指定して TSM を経由しない経路へ。
     #[cfg(target_os = "macos")]
     let v_key = Key::Other(0x09); // kVK_ANSI_V
     #[cfg(target_os = "windows")]
@@ -271,16 +294,12 @@ fn synthesize_paste_keystroke() -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let v_key = Key::Unicode('v');
 
-    tracing::info!("synthesize_paste_keystroke: Cmd press");
     e.key(modifier, Direction::Press)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
-    tracing::info!("synthesize_paste_keystroke: V click");
     e.key(v_key, Direction::Click)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
-    tracing::info!("synthesize_paste_keystroke: Cmd release");
     e.key(modifier, Direction::Release)
         .map_err(|e| CnxError::Paste(e.to_string()))?;
-    tracing::info!("synthesize_paste_keystroke: COMPLETE");
     Ok(())
 }
 

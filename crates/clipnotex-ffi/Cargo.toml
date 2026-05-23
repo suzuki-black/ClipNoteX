@@ -9,10 +9,11 @@ homepage    = { workspace = true }
 description = "C ABI layer for Swift/AppKit (macOS) and other native frontends."
 
 [lib]
-# Generate both:
-#   - libclipnotex_ffi.a   (Swift link / Xcode)
-#   - libclipnotex_ffi.dylib (loadable)
-crate-type = ["staticlib", "cdylib", "rlib"]
+# staticlib のみ — .a を Swift パッケージから静的リンクする。
+# cdylib (dylib) も出すと、Swift ビルドが優先してそちらをリンクし、
+# 別チーム ID で署名されたアプリ実行時に "different Team IDs" エラーで
+# ロード不可になる。FFI は dylib として配布する必要が無いので外す。
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 clipnotex-core      = { workspace = true }
