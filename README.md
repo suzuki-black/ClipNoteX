@@ -2,17 +2,17 @@
 
 # 📋 ClipNoteX
 
-**The clipboard manager that doesn't phone home — and can't be made to.**
+**The native clipboard manager that doesn't phone home — and can't be made to.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.82+-orange?logo=rust)](https://www.rust-lang.org)
-[![Swift](https://img.shields.io/badge/Swift-5.9+-FA7343?logo=swift)](https://swift.org)
-[![macOS](https://img.shields.io/badge/macOS-13+-lightgrey?logo=apple)](#)
-[![Version](https://img.shields.io/badge/version-0.1.0--dev-brightgreen)](#)
+[![Swift](https://img.shields.io/badge/Swift-5.9+-orange?logo=swift)](https://swift.org)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2013%2B-lightgrey?logo=apple)](#)
+[![Version](https://img.shields.io/badge/version-0.2.0--dev-brightgreen)](#)
 
 <br/>
 
-*Copy anything. Find it instantly. Paste it perfectly. Log what you did.*
+*Copy anything. Find it instantly. Paste it perfectly. Log what you did — all offline, all encrypted.*
 
 </div>
 
@@ -20,32 +20,75 @@
 
 ## Why ClipNoteX?
 
-Most clipboard managers either **sync to the cloud** (privacy risk), **skip encryption** (security risk), or **don't let you reformat** what you paste (productivity loss).
+Most clipboard managers either **sync to the cloud** (privacy risk), **skip encryption** (security risk), or are **Electron-based bloatware** (battery drain).
 
-ClipNoteX does all three right — entirely offline, with military-grade encryption baked in from day one, in a tiny **menubar-only native app** (no Electron, no WebView, no Dock icon).
+ClipNoteX takes the opposite approach:
 
-| | ClipNoteX | Clipy / Pasta | Cloud-based managers |
-|---|---|---|---|
-| **Encrypted at rest** | ✅ XChaCha20-Poly1305 | ❌ Plaintext | ⚠️ Server-side |
-| **100% local / offline** | ✅ | ✅ | ❌ |
-| **Format on paste** | ✅ JSON · SQL · MD | ❌ | ❌ |
-| **Password manager aware** | ✅ Auto-exclude | ❌ | ⚠️ |
-| **Work log (DONE LOG)** | ✅ Built-in | ❌ | ❌ |
-| **Native macOS (no WebView)** | ✅ AppKit | ✅ | ❌ Electron |
-| **Open source** | ✅ MIT | ✅ | ❌ |
+|                              | ClipNoteX               | Clipy / Maccy | Cloud-based managers   |
+|------------------------------|-------------------------|---------------|------------------------|
+| **Native UI**                | ✅ AppKit / NSPanel      | ✅             | ❌ Electron / WebView   |
+| **Encrypted at rest**        | ✅ XChaCha20-Poly1305    | ❌ Plaintext   | ⚠️ Server-side          |
+| **100% local / offline**     | ✅                       | ✅             | ❌                       |
+| **Image / RTF / HTML paste** | ✅                       | ✅             | ⚠️                       |
+| **Format on paste**          | ✅ JSON · SQL · MD ...   | ❌             | ❌                       |
+| **Password-manager safe**    | ✅ Auto-exclude          | ⚠️             | ⚠️                       |
+| **Work log (DONE LOG)**      | ✅ Built-in              | ❌             | ❌                       |
+| **Open source**              | ✅ MIT                   | ✅             | ❌                       |
 
 ---
 
 ## Features
 
-- **🔒 Encrypted history** — Every entry is encrypted with XChaCha20-Poly1305. Keys are derived via Argon2id and stored in your OS keychain.
-- **⚡ Instant native UI** — NSStatusItem + non-activating NSPanel popup. Pops in milliseconds, never steals focus from the app you're pasting into.
-- **✨ Format Paste** — Copy messy JSON, paste perfect JSON. Live preview for JSON / SQL / Markdown / plain text / HTML / CSS / JS / TS.
-- **🔑 Password manager safe** — 1Password / Bitwarden / KeePassXC windows are automatically excluded.
-- **📓 DONE LOG** — Turn any clipboard item into a work log entry. Edit, tag, delete, export as Markdown.
-- **📌 Pin & protect** — Pin important clips, survive quota eviction.
-- **🗄 BlobStore for large payloads** — Images / PDFs over 256 KiB live in a content-addressed encrypted blob store; small text stays inline.
-- **⌨️ Keyboard-first** — Global hotkeys, number-key quick-paste, ⇧⏎ for plain, ⌥⏎ for format preview.
+- **🔒 Encrypted history** — Every entry is sealed with XChaCha20-Poly1305 AEAD. Keys live in the macOS Keychain (Keyring v1 service `ClipNoteX`).
+- **⚡ Native menubar UI** — `NSStatusItem` + `NSPanel` (non-activating). Pops up at the cursor in milliseconds; never steals focus from your text editor.
+- **🧠 Clipy-compatible reorder** — Pasted items move to the top of the history. Same content re-copied bumps the existing entry. No silent dedup losses.
+- **🖼 Full payload support** — Text, RTF, HTML, images, PDFs and file lists are all captured and round-tripped. Large payloads (>256 KiB) are content-addressed and offloaded to encrypted `blobs/` to keep the DB compact.
+- **✨ Format Paste** — Copy messy JSON, paste perfect JSON. Live preview before commit. Supports JSON · SQL · Markdown · HTML · CSS · JavaScript · TypeScript · plain text.
+- **🔑 Password-manager safe** — 1Password, Bitwarden, KeePassXC windows are excluded by default and at the bundle-id level. Always.
+- **📓 DONE LOG** — Promote any clipboard item (or quick-capture freeform text) into a daily work log. Tag, edit, export as Markdown.
+- **📌 Pin & protect** — Pinned clips survive quota eviction.
+- **🛠 Reset switch** — One-button data wipe for recovering from broken encryption state.
+- **⌨️ Keyboard-first** — Open with `⌘⇧V`, paste with `⏎` or `1…9`, never touch the trackpad.
+
+---
+
+## Demo
+
+```
+┌──────────────────────────────────────────────────────┐
+│  🔍  Search clipboard…                                │
+├──────────────────────────────────────────────────────┤
+│  1  📝  Hello from ClipNoteX                          │
+│         Safari · 12s                                   │
+├──────────────────────────────────────────────────────┤
+│  2  🖼  (Image)                                        │
+│         Preview · 1m                                   │
+├──────────────────────────────────────────────────────┤
+│  3  📌  SELECT * FROM users WHERE id = 1               │
+│         Terminal · 3h                                  │
+├──────────────────────────────────────────────────────┤
+│  4  📝  Fixed the race condition in capture loop       │
+│         Slack · 12:30                                  │
+└──────────────────────────────────────────────────────┘
+  ↑↓ nav · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · ⌘P pin · ⌘⌫ delete · 1–9 quick · ⎋ close
+```
+
+**Format Paste:**
+
+```
+Before:  {"name":"test","value":42,"list":[1,2,3]}
+
+After (⌥⏎ → live preview → ⌘⏎):
+{
+  "name": "test",
+  "value": 42,
+  "list": [
+    1,
+    2,
+    3
+  ]
+}
+```
 
 ---
 
@@ -53,46 +96,41 @@ ClipNoteX does all three right — entirely offline, with military-grade encrypt
 
 ```
 ClipNoteX/
-├── crates/                       ← Pure Rust core (shared across OS)
-│   ├── clipnotex-core/           Shared types, event bus, settings
-│   ├── clipnotex-clipboard/      OS clipboard backend (NSPasteboard / Win32)
-│   ├── clipnotex-store/          Encrypted redb storage
-│   ├── clipnotex-donelog/        DONE LOG store + Markdown export
-│   ├── clipnotex-paste/          Paste controller + format application
-│   ├── clipnotex-format/         Text formatters (JSON / SQL / Markdown)
-│   ├── clipnotex-hotkey/         Global hotkey registration
-│   ├── clipnotex-app/            Capture loop, quota, filter
-│   └── clipnotex-ffi/            ★ C ABI bridge (cbindgen → ClipNoteX.h)
-└── apps/
-    └── macos/                    ← Swift + AppKit shell (SPM)
-        ├── Package.swift
-        ├── Info.plist
-        ├── build-app.sh           # → builds ClipNoteX.app
-        └── Sources/
-            ├── ClipNoteXCore/     # systemLibrary wrapping ClipNoteX.h
-            └── ClipNoteX/
-                ├── main.swift
-                ├── AppDelegate.swift
-                ├── StatusBarController.swift     (menubar + popup menu)
-                └── DoneLogWindow.swift            (DONE LOG window)
+├── crates/                          ← shared Rust core
+│   ├── clipnotex-core/              # types, event bus, settings
+│   ├── clipnotex-clipboard/         # NSPasteboard / Win32 backends
+│   ├── clipnotex-store/             # encrypted redb + blob store
+│   ├── clipnotex-donelog/           # DONE LOG store + Markdown export
+│   ├── clipnotex-paste/             # paste controller + format apply
+│   ├── clipnotex-format/            # JSON / SQL / MD / HTML formatters
+│   ├── clipnotex-hotkey/            # global-hotkey abstraction
+│   ├── clipnotex-app/               # capture loop + quota + exclusion
+│   └── clipnotex-ffi/               # C ABI surface (cbindgen → ClipNoteX.h)
+├── apps/
+│   ├── macos/                       # Swift + AppKit shell
+│   │   ├── Sources/ClipNoteX/       # AppDelegate / StatusBar / SearchPanel ...
+│   │   ├── Info.plist               # LSUIElement = true (no Dock icon)
+│   │   ├── icon.icns                # app icon
+│   │   ├── build-app.sh             # cargo build → SwiftPM → .app
+│   │   └── sign-app.sh              # codesign + notarize helper
+│   └── windows/                     # WinUI 3 scaffolding (v0.4)
+└── tools/devcli                     # CLI for store/paste smoke tests
 ```
 
-**Tech stack:**
+### Why this split?
 
-| Layer | Technology |
-|-------|-----------|
-| UI (macOS) | Swift 5.9 + AppKit (NSStatusItem · non-activating NSPanel · NSTableView) |
-| Core | Rust + Tokio |
-| FFI | cbindgen-generated C header + static library |
-| Storage | [redb](https://github.com/cberner/redb) (embedded KV) + content-addressed BlobStore |
-| Encryption | XChaCha20-Poly1305 · Argon2id · BLAKE3 |
-| Clipboard | NSPasteboard via [objc2](https://github.com/madsmtm/objc2) |
+The Rust crates are 100% platform-agnostic (or feature-flagged per OS). The Swift app is a **thin AppKit shell** that talks to the Rust core through a stable C ABI. The same staticlib will drive a Windows WinUI 3 frontend later — no Electron, no WebView, no JS toolchain.
 
-The same Rust crates will power a future **Windows** frontend (C# WinUI 3 against the same `libclipnotex_ffi.a`).
+### Tech stack
 
-> **Note**: an earlier prototype used Tauri 2 for the UI shell but was retired
-> at tag [`v0.1-tauri-legacy`](../../releases) — the WebView model could not
-> deliver the non-activating menubar UX that clipboard managers need on macOS.
+| Layer        | Technology                                       |
+|--------------|--------------------------------------------------|
+| Core         | Rust 1.82 · Tokio · redb                         |
+| Crypto       | XChaCha20-Poly1305 · Argon2id · BLAKE3           |
+| FFI          | `staticlib` + `cbindgen` → `ClipNoteX.h`         |
+| macOS shell  | Swift 5.9 · AppKit · `NSStatusItem` · `NSPanel`  |
+| Hotkey       | `global-hotkey` (Carbon under the hood)          |
+| Keystroke    | `enigo` with raw kVK codes (no TSM lookups)      |
 
 ---
 
@@ -100,66 +138,60 @@ The same Rust crates will power a future **Windows** frontend (C# WinUI 3 agains
 
 ### Requirements
 
-- **macOS 13+**
+- macOS 13 (Ventura) or later
 - [Rust](https://rustup.rs/) 1.82+
-- Xcode Command Line Tools (Swift 5.9+)
+- Xcode 15 (command-line tools only is enough)
 
 ### Build & run
 
 ```bash
-# 1) Build everything (Rust staticlib → Swift → .app bundle)
-cd apps/macos
-./build-app.sh
-
-# 2) Launch the app
+git clone https://github.com/suzuki-black/ClipNoteX.git
+cd ClipNoteX/apps/macos
+./build-app.sh           # cargo → swift → assemble + ad-hoc sign + strip quarantine
 open build/ClipNoteX.app
-
-# Or run from terminal (logs to stderr — useful while developing)
-./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 ```
 
-A 📋 icon appears in the menu bar. The first time you press `Cmd+Shift+V`, macOS will ask for **Accessibility permission** (required to simulate the paste keystroke).
+The very first `⌘⇧V` press triggers a macOS **Accessibility permission** prompt — required to synthesize the paste keystroke. Grant it once.
 
-### Development workflow
+For logs while debugging:
 
 ```bash
-# Rust only (fast iteration on the core)
-cargo build -p clipnotex-ffi
-cargo test --workspace
-
-# Swift only (assumes Rust .a is up-to-date)
-cd apps/macos
-swift build
-
-# Full debug build of the .app
-cd apps/macos
-./build-app.sh --debug
+./build/ClipNoteX.app/Contents/MacOS/ClipNoteX                       # foreground
+RUST_LOG=clipnotex=debug ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 ```
 
-The cbindgen build script regenerates `crates/clipnotex-ffi/include/ClipNoteX.h` on every cargo build; `build-app.sh` copies it into the Swift module.
+### Dev keys (no Keychain prompt)
+
+```bash
+CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
+```
+
+Generates fresh in-memory keys each run — useful while iterating, but every restart loses old history. Use **Preferences → Maintenance → Reset all data** to wipe stale entries cleanly when switching modes.
 
 ---
 
 ## Keyboard Shortcuts
 
-### Global (macOS)
+### Global
 
-| Key | Action |
-|-----|--------|
-| `⌘⇧V` | Open clipboard history menu at the menu bar icon |
-| `⌘⇧D` | Capture current clipboard into DONE LOG |
+| Key       | Action                                       |
+|-----------|----------------------------------------------|
+| `⌘⇧V`     | Open clipboard history popup                 |
+| `⌘⇧D`     | Capture current clipboard to DONE LOG        |
 
-### In the popup panel
+### Inside the popup
 
-| Key | Action |
-|-----|--------|
-| `1`–`9` | Quick-paste the n-th history item |
-| `↑` `↓` | Navigate items |
-| `⏎` | Paste selected item |
-| `⇧⏎` | Paste as plain text |
-| `⌥⏎` | Open Format Paste preview |
-| Type | Live-filter (search) |
-| `⎋` | Close panel |
+| Key           | Action                                                |
+|---------------|-------------------------------------------------------|
+| `↑` `↓`       | Navigate items                                        |
+| `⏎`           | Paste with all original formats                       |
+| `⇧⏎`         | Paste as plain text                                   |
+| `⌥⏎`         | Open Format Paste live preview                        |
+| `⌘P`          | Pin / unpin the selected item                         |
+| `⌘⌫`          | Delete the selected item                              |
+| `1` … `9`     | Quick-paste the Nth item                              |
+| `⎋`           | Close the popup                                       |
+| any character | Live-filter the history                               |
 
 ---
 
@@ -167,64 +199,70 @@ The cbindgen build script regenerates `crates/clipnotex-ffi/include/ClipNoteX.h`
 
 ClipNoteX was designed with security as a constraint, not an afterthought.
 
-- **XChaCha20-Poly1305 AEAD** — authenticated encryption for every stored clip
-- **Argon2id KDF** — key derivation resistant to GPU/ASIC attacks
-- **BLAKE3** — fast, collision-resistant content hashing
-- **macOS Keychain integration** — encryption keys live in the Keychain
-- **Concealed Pasteboard** — `org.nspasteboard.ConcealedType` entries are discarded
-- **Self-write guard** — prevents the app from re-capturing its own paste output
-- **Zero network I/O** — the binary makes no outbound connections
-- **No Dock icon** (`LSUIElement = true`) — runs unobtrusively in the menu bar
+- **XChaCha20-Poly1305 AEAD** — authenticated encryption for every stored clip; `created_at` (big-endian) is used as AAD to prevent ciphertext replay between entries.
+- **Argon2id KDF** — key derivation resistant to GPU/ASIC attacks.
+- **BLAKE3** — fast, collision-resistant content hashing for dedup and blob addressing.
+- **macOS Keychain integration** — data key lives in Keychain (service `ClipNoteX`, account `data_key`). Ephemeral in-memory keys available for development via `CLIPNOTEX_EPHEMERAL=1`.
+- **Concealed Pasteboard handling** — macOS `org.nspasteboard.ConcealedType` / `TransientType` / `AutoGenerated` entries are discarded before they ever reach the store.
+- **Self-write guard** — a digest LRU prevents the app from re-capturing its own paste operations.
+- **Zero network I/O** — the binary makes no outbound connections. Verify with `lsof -i -p <pid>` or Little Snitch.
 
-**Default exclusion list** (never captured, ever):
+### Default exclusion list
 
-| App | Match type |
-|-----|-----------|
-| 1Password | Bundle ID + exe name |
-| Bitwarden | Bundle ID + exe name |
-| KeePassXC | Bundle ID + exe name |
+These applications are **never** captured:
+
+| App         | Match type           |
+|-------------|----------------------|
+| 1Password   | Bundle ID + exe name |
+| Bitwarden   | Bundle ID + exe name |
+| KeePassXC   | Bundle ID + exe name |
 
 ---
 
 ## Data flow
 
 ```
-Clipboard change
-  └─ MacWatcher (100ms poll)
-       └─ ExclusionFilter        ← blocks password managers
-            └─ StoreService      ← encrypts + persists
-                 └─ EventBus
-                      ├─ QuotaManager   ← evicts old clips
-                      └─ FFI callback   ← notifies Swift to refresh UI
+NSPasteboard change
+  └─ MacWatcher (100 ms changeCount poll)
+       └─ ConcealedType / SelfWriteGuard checks
+            └─ ExclusionFilter  (blocks password managers)
+                 └─ StoreService.add_item
+                      ├─ small payload → Inline (encrypted in row)
+                      ├─ large payload → BlobStore (content-addressed file)
+                      └─ duplicate digest → touch → bump_to_top
+                           └─ EventBus → QuotaManager evicts oldest non-pinned
 ```
 
 ---
 
 ## Roadmap
 
-- [x] Searchable history popup (NSPanel)
-- [x] Preferences (history quota, launch-at-login)
-- [x] BlobStore for large images
-- [x] Format Paste live preview
-- [ ] Custom hotkey editor (currently fixed at build time)
-- [ ] Image thumbnail in popup
-- [ ] DONE LOG search field
-- [ ] Code signing + Notarization
-- [ ] **Windows port** (same Rust core + C# WinUI 3 frontend)
-- [ ] Local sync between Macs (opt-in, encrypted)
-- [ ] Plugin API for custom formatters
+- [x] **v0.1** — initial Tauri prototype (now retired; tagged `v0.1-tauri-legacy`)
+- [x] **v0.2** — Swift + AppKit native shell, image paste, Clipy-compatible reorder, Reset feature
+- [ ] **v0.3** — customizable hotkeys, settings UI for exclusion rules, syntax-highlighted preview
+- [ ] **v0.4** — Windows version (WinUI 3 frontend on the same Rust core)
+- [ ] **v0.5** — opt-in iCloud-encrypted sync between Macs
+- [ ] **v0.6** — plugin API for custom formatters
+- [ ] **v1.0** — Developer ID signing, notarization, Sparkle auto-update
 
 ---
 
 ## Contributing
 
-PRs and issues welcome!
+PRs and issues are welcome.
 
 ```bash
+# Run all tests
 cargo test --workspace
+
+# Lint
 cargo clippy --workspace --all-targets
-cargo fmt --all -- --check
+
+# Format
+cargo fmt --all
 ```
+
+Please open an issue before starting work on anything larger than a typo fix, so we can talk through scope.
 
 ---
 
@@ -232,7 +270,9 @@ cargo fmt --all -- --check
 
 MIT © 2026 suzuki-black — see [LICENSE](LICENSE).
 
-Third-party crates / packages are used under their respective licenses (MIT / Apache-2.0).
+Third-party crates are used under their respective licenses (MIT / Apache-2.0 / BSD-2-Clause).
+
+---
 
 ---
 
@@ -242,228 +282,141 @@ Third-party crates / packages are used under their respective licenses (MIT / Ap
 
 **クラウドに送らない。暗号化しないなんてあり得ない。Electron 不要のネイティブ実装。**
 
-*何でもコピー。瞬時に検索。完璧にペースト。やった作業を記録。*
-
 </div>
 
 ---
 
 ## なぜ ClipNoteX？
 
-多くのクリップボードマネージャーは **クラウド同期 (プライバシーリスク)** か **暗号化なし (セキュリティリスク)** か **ペースト時の整形不可 (生産性損失)** のいずれかを抱えています。
+世のクリップボードマネージャーは、だいたい以下のどれかに当てはまります：
 
-ClipNoteX はその 3 つを全て解決します — 完全オフライン、起動時から軍用級暗号化、しかも **メニューバー常駐の小さなネイティブアプリ** (Electron なし / WebView なし / Dock アイコンなし)。
+- **クラウド同期** でプライバシーが危ない
+- **暗号化なし** でセキュリティが危ない
+- **Electron 製** で常駐バッテリーを食う
 
-| | ClipNoteX | Clipy / Pasta | クラウド型 |
-|---|---|---|---|
-| **保存時暗号化** | ✅ XChaCha20-Poly1305 | ❌ 平文 | ⚠️ サーバ側 |
-| **100% ローカル / オフライン** | ✅ | ✅ | ❌ |
-| **ペースト時整形** | ✅ JSON · SQL · MD | ❌ | ❌ |
-| **パスワードマネージャー対応** | ✅ 自動除外 | ❌ | ⚠️ |
-| **作業ログ (DONE LOG)** | ✅ 内蔵 | ❌ | ❌ |
-| **macOS ネイティブ (WebView なし)** | ✅ AppKit | ✅ | ❌ Electron |
-| **オープンソース** | ✅ MIT | ✅ | ❌ |
+ClipNoteX はそのすべての逆を行きます — **完全オフライン・常時暗号化・AppKit ネイティブ**。
+
+|                                | ClipNoteX               | Clipy / Maccy | クラウド系             |
+|--------------------------------|-------------------------|---------------|------------------------|
+| **ネイティブ UI**              | ✅ AppKit / NSPanel      | ✅             | ❌ Electron / WebView   |
+| **暗号化保管**                 | ✅ XChaCha20-Poly1305    | ❌ 平文        | ⚠️ サーバ側             |
+| **完全オフライン**             | ✅                       | ✅             | ❌                       |
+| **画像 / RTF / HTML 対応**     | ✅                       | ✅             | ⚠️                       |
+| **整形ペースト**               | ✅ JSON · SQL · MD ...   | ❌             | ❌                       |
+| **パスワードマネージャー除外** | ✅                       | ⚠️             | ⚠️                       |
+| **作業ログ (DONE LOG)**        | ✅ 標準搭載              | ❌             | ❌                       |
+| **オープンソース**             | ✅ MIT                   | ✅             | ❌                       |
 
 ---
 
 ## 主な機能
 
-- **🔒 暗号化履歴** — 全エントリを XChaCha20-Poly1305 で暗号化、鍵は Argon2id で導出し macOS Keychain に保存
-- **⚡ ネイティブ UI** — `NSStatusItem` + 非アクティブ化 `NSPanel`。WebView なしでミリ秒で出現、フォーカスを奪わない
-- **✨ フォーマットペースト** — JSON / SQL / Markdown / Plain / HTML / CSS / JS / TS のライブプレビュー
-- **🔑 パスワードマネージャー除外** — 1Password / Bitwarden / KeePassXC は自動的に除外
-- **📓 DONE LOG** — クリップボード内容を作業ログに。編集・タグ・削除・Markdown エクスポート対応
-- **📌 ピン留め** — 重要アイテムをクォータ削除から保護
-- **🗄 BlobStore** — 256 KiB 超の画像 / PDF は コンテンツアドレス型暗号化ブロブとして別保管
-- **⌨️ キーボード中心** — グローバルホットキー・番号即ペースト・⇧⏎ プレーン・⌥⏎ 整形プレビュー
-
----
-
-## アーキテクチャ
-
-```
-ClipNoteX/
-├── crates/                       ← Rust コア (OS 横断で共通)
-│   ├── clipnotex-core/           共通型・イベントバス・設定
-│   ├── clipnotex-clipboard/      OS クリップボードバックエンド (NSPasteboard / Win32)
-│   ├── clipnotex-store/          暗号化 redb ストレージ + BlobStore
-│   ├── clipnotex-donelog/        DONE LOG ストア + Markdown エクスポート
-│   ├── clipnotex-paste/          ペースト制御 + 整形適用
-│   ├── clipnotex-format/         テキストフォーマッタ (JSON / SQL / Markdown 等)
-│   ├── clipnotex-hotkey/         グローバルホットキー登録
-│   ├── clipnotex-app/            キャプチャループ・クォータ・フィルタ
-│   └── clipnotex-ffi/            ★ C ABI ブリッジ (cbindgen → ClipNoteX.h)
-└── apps/
-    └── macos/                    ← Swift + AppKit シェル (SPM)
-        ├── Package.swift
-        ├── Info.plist
-        ├── build-app.sh           # → ClipNoteX.app をビルド
-        └── Sources/
-            ├── ClipNoteXCore/     # ClipNoteX.h ラップ用 systemLibrary
-            └── ClipNoteX/
-                ├── main.swift
-                ├── AppDelegate.swift
-                ├── StatusBarController.swift     (メニューバー + 右クリックメニュー)
-                ├── SearchPanel.swift              (検索付きポップアップ)
-                ├── DoneLogWindow.swift            (DONE LOG ウィンドウ)
-                ├── FormatPasteWindow.swift        (整形プレビュー)
-                ├── PreferencesWindow.swift        (設定)
-                └── Settings.swift                 (UserDefaults 永続化)
-```
-
-**技術スタック:**
-
-| 層 | 技術 |
-|---|---|
-| UI (macOS) | Swift 5.9 + AppKit (NSStatusItem · 非アクティブ化 NSPanel · NSTableView) |
-| コア | Rust + Tokio |
-| FFI | cbindgen で C ヘッダ + staticlib 生成 |
-| ストレージ | [redb](https://github.com/cberner/redb) (組込 KV) + コンテンツアドレス型 BlobStore |
-| 暗号化 | XChaCha20-Poly1305 · Argon2id · BLAKE3 |
-| クリップボード | NSPasteboard via [objc2](https://github.com/madsmtm/objc2) |
-
-将来の **Windows 版** も同じ Rust crates を流用します (C# WinUI 3 から `libclipnotex_ffi.a` を呼ぶ構成を予定)。
-
-> **メモ**: 初期試作は Tauri 2 を採用していましたが、WebView ベースでは
-> macOS のクリップボードマネージャー UX (アプリ非アクティブのままポップアップ表示)
-> が実現できなかったため、タグ [`v0.1-tauri-legacy`](../../releases) で退避済みです。
+- **🔒 暗号化履歴** — XChaCha20-Poly1305 AEAD で全エントリを暗号化。鍵は macOS Keychain (`ClipNoteX` サービス) に保管
+- **⚡ ネイティブメニューバー UI** — `NSStatusItem` + 非アクティブ化 `NSPanel`。カーソル付近に即時ポップアップし、エディタのフォーカスを奪わない
+- **🧠 Clipy 互換挙動** — ペーストしたアイテムは履歴の先頭に移動。同じ内容を再コピーすると既存エントリを浮上（黙って消す dedup 損失なし）
+- **🖼 全ペイロード対応** — テキスト・RTF・HTML・画像・PDF・ファイルリストすべてキャプチャ＆ペースト可能。256 KiB 超は content-addressed 暗号化 blob として `blobs/` に格納し DB をコンパクトに保つ
+- **✨ フォーマットペースト** — 崩れた JSON をコピー → 整形プレビュー → そのままペースト。JSON · SQL · Markdown · HTML · CSS · JS · TS · プレーンに対応
+- **🔑 パスワードマネージャー除外** — 1Password・Bitwarden・KeePassXC を bundle-id レベルで常時除外
+- **📓 DONE LOG** — クリップボードや手書きメモを作業日誌に昇格。タグ付け・編集・Markdown エクスポート
+- **📌 ピン留め** — ピン留めはクォータ削除から保護
+- **🛠 リセット機能** — 「壊れた暗号化状態」(decrypt failed 大量警告) からの復帰用ワンボタン全削除
+- **⌨️ キーボード完結** — `⌘⇧V` で開いて `⏎` / `1〜9` でペースト。トラックパッド不要
 
 ---
 
 ## クイックスタート
 
-### 必要環境
-
-- **macOS 13+**
-- [Rust](https://rustup.rs/) 1.82+
-- Xcode Command Line Tools (Swift 5.9+)
-
-### ビルドと実行
-
 ```bash
-# 1) 一括ビルド (Rust staticlib → Swift → .app バンドル)
-cd apps/macos
+git clone https://github.com/suzuki-black/ClipNoteX.git
+cd ClipNoteX/apps/macos
 ./build-app.sh
-
-# 2) アプリを起動
 open build/ClipNoteX.app
-
-# またはターミナルで実行 (ログが stderr に出るので開発時に便利)
-./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 ```
 
-メニューバーに 📋 アイコンが現れます。初回 `⌘⇧V` 押下時に macOS が **アクセシビリティ権限** を要求します (ペースト合成のため必須)。
+初回 `⌘⇧V` 押下時に macOS が**アクセシビリティ権限**を要求します（ペーストキー合成のため必要）。許可してください。
 
-### 開発ワークフロー
+開発時、Keychain プロンプトが煩わしい場合：
 
 ```bash
-# Rust だけ (コアの高速反復)
-cargo build -p clipnotex-ffi
-cargo test --workspace
-
-# Swift だけ (Rust .a が最新前提)
-cd apps/macos
-swift build
-
-# debug ビルドの .app
-cd apps/macos
-./build-app.sh --debug
+CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 ```
 
-cbindgen のビルドスクリプトは cargo build のたび `crates/clipnotex-ffi/include/ClipNoteX.h` を再生成し、`build-app.sh` が Swift モジュールへコピーします。
+毎起動で鍵が変わるため過去データは読めなくなります。**Preferences → Maintenance → Reset all data…** で安全にクリーンアップ可能。
 
 ---
 
 ## キーボードショートカット
 
-### グローバル (macOS)
+### グローバル
 
-| キー | 動作 |
-|---|---|
-| `⌘⇧V` | メニューバー直下にクリップボード履歴ポップアップを開く |
+| キー  | 動作                                     |
+|-------|------------------------------------------|
+| `⌘⇧V` | 履歴ポップアップを開く                   |
 | `⌘⇧D` | 現在のクリップボードを DONE LOG にキャプチャ |
 
-### ポップアップパネル内
+### ポップアップ内
 
-| キー | 動作 |
-|---|---|
-| `1`〜`9` | n 番目を即ペースト |
-| `↑` `↓` | アイテム選択 |
-| `⏎` | ペースト |
-| `⇧⏎` | プレーンテキストでペースト |
-| `⌥⏎` | フォーマットプレビューを開く |
-| 文字入力 | ライブフィルタ (検索) |
-| `⎋` | パネルを閉じる |
-
----
-
-## セキュリティ
-
-ClipNoteX はセキュリティを後付けではなく設計上の制約として作られています。
-
-- **XChaCha20-Poly1305 AEAD** — 保存される全クリップに認証付き暗号化
-- **Argon2id KDF** — GPU/ASIC 攻撃に耐性のある鍵導出
-- **BLAKE3** — 高速で衝突耐性のあるコンテンツハッシュ
-- **macOS Keychain 連携** — 暗号鍵を Keychain に保管
-- **Concealed Pasteboard** — `org.nspasteboard.ConcealedType` エントリは破棄
-- **自己書込ガード** — 自分が書いたペーストは再キャプチャしない
-- **ネットワーク I/O ゼロ** — バイナリは一切の外部通信をしない
-- **Dock 非表示** (`LSUIElement = true`) — メニューバーで邪魔せず常駐
-
-**デフォルト除外リスト** (絶対にキャプチャしない):
-
-| アプリ | マッチ方式 |
-|---|---|
-| 1Password | Bundle ID + exe 名 |
-| Bitwarden | Bundle ID + exe 名 |
-| KeePassXC | Bundle ID + exe 名 |
+| キー       | 動作                                         |
+|------------|----------------------------------------------|
+| `↑` `↓`    | アイテム選択                                  |
+| `⏎`        | ペースト（元のフォーマット保持）              |
+| `⇧⏎`      | プレーンテキストでペースト                    |
+| `⌥⏎`      | フォーマットペースト（ライブプレビュー）       |
+| `⌘P`       | 選択アイテムをピン留め / 解除                 |
+| `⌘⌫`       | 選択アイテムを削除                            |
+| `1`〜`9`   | n 番目を即ペースト                            |
+| `⎋`        | 閉じる                                        |
+| 文字       | 履歴をライブフィルタ                          |
 
 ---
 
-## データフロー
+## セキュリティ設計
 
-```
-クリップボード変更
-  └─ MacWatcher (100ms ポーリング)
-       └─ ExclusionFilter        ← パスワードマネージャーをブロック
-            └─ StoreService      ← 暗号化＋永続化 (大きな payload は BlobStore へ)
-                 └─ EventBus
-                      ├─ QuotaManager   ← 古いクリップを退避
-                      └─ FFI コールバック ← Swift に UI 更新通知
-```
+- **XChaCha20-Poly1305 AEAD** — 全データを認証付き暗号化。AAD として `created_at` (big-endian) を使い、エントリ間の ciphertext リプレイを防止
+- **Argon2id KDF** — GPU/ASIC 耐性の鍵導出
+- **BLAKE3** — 重複検知 / blob アドレッシング用の高速ハッシュ
+- **macOS Keychain** にデータ鍵を保管（service `ClipNoteX` / account `data_key`）
+- **ネットワーク通信なし** — 外部通信は一切しない（Little Snitch 等で検証可）
+- **デフォルト除外** — 1Password・Bitwarden・KeePassXC は常に除外
+- **NSPasteboard ConcealedType / TransientType** はストアに渡る前に破棄
+
+データが大量の `decrypt failed` 警告で読めなくなった場合は、**Preferences → Maintenance → Reset all data…** で復帰してください。
+
+---
+
+## アーキテクチャ
+
+- **Rust コア** (`crates/`) — 暗号化・ストレージ・キャプチャ・ペースト・フォーマット
+- **C ABI 層** (`crates/clipnotex-ffi`) — cbindgen が `ClipNoteX.h` を自動生成
+- **macOS フロント** (`apps/macos`) — Swift + AppKit。Clipy / Maccy と同じ `NSStatusItem` パターン
+- **Windows フロント** (`apps/windows`) — v0.4 で同じ Rust staticlib を WinUI 3 から利用予定
 
 ---
 
 ## ロードマップ
 
-- [x] 検索フィールド付き履歴ポップアップ
-- [x] 設定画面 (履歴上限 / Launch at login)
-- [x] BlobStore (大きな画像対応)
-- [x] フォーマットペースト ライブプレビュー
-- [ ] ショートカットの編集 UI (現在はビルド時固定)
-- [ ] 画像サムネイル表示
-- [ ] DONE LOG 検索
-- [ ] Code signing + Notarization
-- [ ] **Windows 版** (同じ Rust コア + C# WinUI 3 フロント)
-- [ ] Mac 間ローカル同期 (オプトイン・暗号化)
-- [ ] カスタムフォーマッタの Plugin API
+- [x] **v0.1** — Tauri 試作（廃止、タグ `v0.1-tauri-legacy` で退避済み）
+- [x] **v0.2** — Swift + AppKit ネイティブ実装、画像ペースト、Clipy 互換並び替え、リセット機能
+- [ ] **v0.3** — ショートカットカスタマイズ、除外ルール GUI、シンタックスハイライト
+- [ ] **v0.4** — Windows 版（同じ Rust コア＋ WinUI 3）
+- [ ] **v0.5** — opt-in iCloud 暗号化同期
+- [ ] **v0.6** — 独自フォーマッタ用プラグイン API
+- [ ] **v1.0** — Developer ID 署名、Notarization、Sparkle 自動更新
 
 ---
 
-## コントリビュート
-
-Issue / PR 歓迎です！
+## 開発
 
 ```bash
-cargo test --workspace
+cargo test --workspace                # コア全テスト
 cargo clippy --workspace --all-targets
-cargo fmt --all -- --check
+cd apps/macos && ./build-app.sh       # .app 生成 (ad-hoc sign + quarantine 除去込み)
 ```
 
 ---
 
 ## ライセンス
 
-MIT © 2026 suzuki-black — 詳細は [LICENSE](LICENSE)。
+MIT © 2026 suzuki-black
 
-サードパーティの crate / パッケージは各々のライセンス (MIT / Apache-2.0) に従います。
+サードパーティクレートは、それぞれの MIT / Apache-2.0 / BSD-2-Clause ライセンスに従います。

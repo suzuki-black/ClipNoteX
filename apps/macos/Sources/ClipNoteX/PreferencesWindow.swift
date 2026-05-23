@@ -45,10 +45,11 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         let tabView = NSTabView(frame: content.bounds)
         tabView.autoresizingMask = [.width, .height]
 
-        tabView.addTabViewItem(makeTab(label: "General",    view: generalView()))
-        tabView.addTabViewItem(makeTab(label: "Shortcuts",  view: shortcutsView()))
-        tabView.addTabViewItem(makeTab(label: "Privacy",    view: privacyView()))
-        tabView.addTabViewItem(makeTab(label: "About",      view: aboutView()))
+        tabView.addTabViewItem(makeTab(label: "General",     view: generalView()))
+        tabView.addTabViewItem(makeTab(label: "Shortcuts",   view: shortcutsView()))
+        tabView.addTabViewItem(makeTab(label: "Privacy",     view: privacyView()))
+        tabView.addTabViewItem(makeTab(label: "Maintenance", view: maintenanceView()))
+        tabView.addTabViewItem(makeTab(label: "About",       view: aboutView()))
 
         content.addSubview(tabView)
     }
@@ -205,6 +206,71 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         v.addSubview(stack)
         pin(stack, to: v)
         return v
+    }
+
+    // MARK: - Maintenance (destructive: data reset)
+
+    private func maintenanceView() -> NSView {
+        let v = NSView()
+        let title = NSTextField(labelWithString: "Reset all data")
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        let desc = NSTextField(wrappingLabelWithString:
+            "Erases every clipboard history entry, every DONE LOG entry, and all on-disk blob files. " +
+            "Use this if the encryption state has gotten out of sync (for example, you see large numbers of " +
+            "‘decrypt failed for item, skipping’ warnings in the log) and the history list shows nothing despite " +
+            "new copies. The current encryption key is kept, so new captures keep working immediately.\n\n" +
+            "⚠ This cannot be undone.")
+        desc.textColor = .secondaryLabelColor
+        desc.font = .systemFont(ofSize: 11)
+
+        let resetBtn = NSButton(title: "Reset all data…", target: self, action: #selector(resetAllDataTapped))
+        resetBtn.bezelStyle = .rounded
+        if #available(macOS 11.0, *) {
+            resetBtn.contentTintColor = .systemRed
+        }
+
+        let stack = NSStackView(views: [title, desc, resetBtn])
+        stack.orientation = .vertical
+        stack.alignment = NSLayoutConstraint.Attribute.left
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(stack)
+        pin(stack, to: v)
+        return v
+    }
+
+    @objc private func resetAllDataTapped() {
+        let alert = NSAlert()
+        alert.messageText = "Erase all ClipNoteX data?"
+        alert.informativeText = "This will permanently delete all clipboard history, DONE LOG entries, " +
+            "and saved blob files. The action cannot be undone."
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "Erase everything")
+        alert.addButton(withTitle: "Cancel")
+        // make Cancel the default to discourage accidents
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let rc = cnx_reset_data()
+        if rc == 0 {
+            let ok = NSAlert()
+            ok.messageText = "Done."
+            ok.informativeText = "All data has been erased."
+            ok.runModal()
+        } else {
+            let err = NSAlert()
+            err.messageText = "Reset failed (code \(rc))."
+            if let msg = cnx_last_error() {
+                err.informativeText = String(cString: msg)
+                cnx_free_string(msg)
+            }
+            err.alertStyle = .warning
+            err.runModal()
+        }
     }
 
     // MARK: - About

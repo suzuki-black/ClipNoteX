@@ -21,7 +21,22 @@ pub async fn run_capture_loop(
     bus: EventBus,
 ) -> Result<()> {
     while let Some(captured) = watcher.next().await? {
+        let preview: String = captured
+            .payloads
+            .iter()
+            .find(|p| is_text(&p.format_id))
+            .and_then(|p| std::str::from_utf8(&p.bytes).ok())
+            .map(|s| s.chars().take(30).collect::<String>())
+            .unwrap_or_else(|| format!("[{} bytes binary]", captured.payloads.iter().map(|p| p.bytes.len()).sum::<usize>()));
+        tracing::info!(
+            source = %captured.source_app.display_name,
+            kind = ?captured.primary_kind,
+            preview = %preview,
+            "clipboard captured"
+        );
+
         if filter.should_block(&captured.source_app, &captured.payloads) {
+            tracing::warn!(source = %captured.source_app.display_name, "captured but BLOCKED by exclusion filter");
             bus.emit(CoreEvent::ClipboardSkipped {
                 reason: SkipReason::Excluded,
             });

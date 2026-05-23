@@ -89,6 +89,17 @@ int32_t cnx_update_done_overlay_json(const char *args_json);
 char *cnx_export_done_markdown(const char *date);
 
 /**
+ * **DESTRUCTIVE**: wipe all clipboard history + DONE LOG + blob files.
+ *
+ * Use when encryption state is corrupted (e.g. keychain key changed and
+ * old data became permanently undecryptable). The keychain key itself is
+ * kept (existing in-memory sealer keeps working for new captures).
+ *
+ * Returns 0 on success.
+ */
+int32_t cnx_reset_data(void);
+
+/**
  * Update the history retention cap (max items kept in encrypted store).
  * Returns 0 on success, negative on error.
  * Note: takes effect on the *next* capture; existing items beyond the cap

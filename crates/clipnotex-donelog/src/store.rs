@@ -335,6 +335,67 @@ impl DoneLogStore {
         Ok(Some(DoneView::new(entry, overlay)))
     }
 
+    /// **DESTRUCTIVE**: remove all DONE LOG entries + overlays + date-index.
+    /// Use as part of a global reset when encryption state is unrecoverable.
+    pub fn reset_all(&self) -> Result<()> {
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("donelog begin_write: {e}")))?;
+        {
+            let mut entries = write
+                .open_table(DONE_ENTRIES)
+                .map_err(|e| CnxError::Storage(format!("open done_entries: {e}")))?;
+            let ks: Vec<Vec<u8>> = entries
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter done_entries: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| k.value().to_vec())
+                .collect();
+            for k in ks {
+                entries
+                    .remove(k.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove done_entries: {e}")))?;
+            }
+
+            let mut ov = write
+                .open_table(DONE_OVERLAYS)
+                .map_err(|e| CnxError::Storage(format!("open done_overlays: {e}")))?;
+            let ks: Vec<Vec<u8>> = ov
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter done_overlays: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| k.value().to_vec())
+                .collect();
+            for k in ks {
+                ov.remove(k.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove done_overlays: {e}")))?;
+            }
+
+            let mut by_date = write
+                .open_table(DONE_BY_DATE)
+                .map_err(|e| CnxError::Storage(format!("open done_by_date: {e}")))?;
+            let ks: Vec<(i32, i64, Vec<u8>)> = by_date
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter done_by_date: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| {
+                    let (y, ts, id) = k.value();
+                    (y, ts, id.to_vec())
+                })
+                .collect();
+            for (y, ts, id) in ks {
+                by_date
+                    .remove((y, ts, id.as_slice()))
+                    .map_err(|e| CnxError::Storage(format!("remove done_by_date: {e}")))?;
+            }
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("donelog commit: {e}")))?;
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Delete operation
     // -----------------------------------------------------------------------

@@ -135,10 +135,12 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
 
     private func reload(query: String) {
         let json: UnsafeMutablePointer<CChar>?
+        // 空クエリ時はリスト表示なので 50 件 (パフォーマンス重視)。
+        // 検索中はバックエンドの上限 (200) まで掘る。
         if query.isEmpty {
             json = cnx_list_history_json(nil, 50)
         } else {
-            json = query.withCString { cstr in cnx_list_history_json(cstr, 50) }
+            json = query.withCString { cstr in cnx_list_history_json(cstr, 200) }
         }
         defer { if let j = json { cnx_free_string(j) } }
         guard let json,

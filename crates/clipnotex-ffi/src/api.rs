@@ -551,6 +551,38 @@ pub unsafe extern "C" fn cnx_export_done_markdown(date: *const c_char) -> *mut c
 }
 
 // ---------------------------------------------------------------------------
+// Maintenance — reset (recovery from broken encryption state)
+// ---------------------------------------------------------------------------
+
+/// **DESTRUCTIVE**: wipe all clipboard history + DONE LOG + blob files.
+///
+/// Use when encryption state is corrupted (e.g. keychain key changed and
+/// old data became permanently undecryptable). The keychain key itself is
+/// kept (existing in-memory sealer keeps working for new captures).
+///
+/// Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn cnx_reset_data() -> i32 {
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return CnxStatus::NotInitialized as i32;
+        }
+    };
+    if let Err(e) = st.store.reset_all() {
+        set_last_error(format!("reset history: {e}"));
+        return CnxStatus::StorageError as i32;
+    }
+    if let Err(e) = st.donelog.reset_all() {
+        set_last_error(format!("reset donelog: {e}"));
+        return CnxStatus::StorageError as i32;
+    }
+    tracing::warn!("USER ACTION: all clipboard history and DONE LOG wiped");
+    CnxStatus::Ok as i32
+}
+
+// ---------------------------------------------------------------------------
 // Settings (runtime mutable)
 // ---------------------------------------------------------------------------
 

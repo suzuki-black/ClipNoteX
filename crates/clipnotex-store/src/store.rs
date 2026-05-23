@@ -127,9 +127,14 @@ impl StoreService {
         Ok(Some(ClipId(ulid::Ulid::from_bytes(id))))
     }
 
-    pub fn touch(&self, _id: ClipId, _now: i64) -> Result<()> {
-        // TODO(M2 polish): re-seal the item with new updated_at.
-        Ok(())
+    /// Bump an existing item's timestamp to "now" so it sorts to the top.
+    /// Used by `add_item` when the same content is captured again (dedup hit).
+    ///
+    /// Clipy/Maccy 互換: 同じ内容を再コピーしたら履歴の最上位に来るのが自然。
+    /// 旧実装は no-op だったため、再コピーが「無視されたように見える」現象を
+    /// 起こしていた (古い位置で更新されず、ユーザは「キャプチャされなかった」と誤認)。
+    pub fn touch(&self, id: ClipId, _now: i64) -> Result<()> {
+        self.bump_to_top(id)
     }
 
     /// Bump an item's `created_at` to "now" so that it sorts to the top of
@@ -275,6 +280,90 @@ impl StoreService {
         write
             .commit()
             .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+        Ok(())
+    }
+
+    /// **DESTRUCTIVE**: remove ALL clipboard history entries and blobs.
+    /// Use this to recover from corrupted encryption state (mass decrypt-failures).
+    /// The redb file is kept (empty tables remain) so subsequent writes work
+    /// without a re-open / re-migrate cycle.
+    pub fn reset_all(&self) -> Result<()> {
+        let write = self
+            .db
+            .begin_write()
+            .map_err(|e| CnxError::Storage(format!("begin_write: {e}")))?;
+        {
+            // 各テーブルを開いて中身を全削除 (drain) する。redb には
+            // truncate API がないので、key を集めて remove する。
+            let mut items_tbl = write
+                .open_table(ITEMS)
+                .map_err(|e| CnxError::Storage(format!("open items: {e}")))?;
+            let keys: Vec<Vec<u8>> = items_tbl
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter items: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| k.value().to_vec())
+                .collect();
+            for k in keys {
+                items_tbl
+                    .remove(k.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove items: {e}")))?;
+            }
+
+            let mut by_time = write
+                .open_table(BY_TIME)
+                .map_err(|e| CnxError::Storage(format!("open by_time: {e}")))?;
+            let keys: Vec<(i64, Vec<u8>)> = by_time
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter by_time: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| {
+                    let (ts, id) = k.value();
+                    (ts, id.to_vec())
+                })
+                .collect();
+            for (ts, id) in keys {
+                by_time
+                    .remove((ts, id.as_slice()))
+                    .map_err(|e| CnxError::Storage(format!("remove by_time: {e}")))?;
+            }
+
+            let mut by_digest = write
+                .open_table(BY_DIGEST)
+                .map_err(|e| CnxError::Storage(format!("open by_digest: {e}")))?;
+            let keys: Vec<Vec<u8>> = by_digest
+                .iter()
+                .map_err(|e| CnxError::Storage(format!("iter by_digest: {e}")))?
+                .filter_map(|r| r.ok())
+                .map(|(k, _)| k.value().to_vec())
+                .collect();
+            for k in keys {
+                by_digest
+                    .remove(k.as_slice())
+                    .map_err(|e| CnxError::Storage(format!("remove by_digest: {e}")))?;
+            }
+        }
+        write
+            .commit()
+            .map_err(|e| CnxError::Storage(format!("commit: {e}")))?;
+
+        // 物理 blob ファイルもすべて消す。中身は暗号化済みだが、ClipItem 側を
+        // 消した今となっては参照不能なのでディスク領域を解放する。
+        if let Some(parent) = self.blobs.root().parent() {
+            // best-effort
+            let _ = parent; // keep self.blobs.root() valid
+        }
+        let blob_root = self.blobs.root().to_path_buf();
+        if blob_root.exists() {
+            for entry in std::fs::read_dir(&blob_root)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    std::fs::remove_dir_all(entry.path())?;
+                } else {
+                    std::fs::remove_file(entry.path())?;
+                }
+            }
+        }
         Ok(())
     }
 
