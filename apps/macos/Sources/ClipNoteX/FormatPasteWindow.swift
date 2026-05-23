@@ -148,8 +148,12 @@ final class FormatPasteWindow: NSWindowController, NSWindowDelegate {
             outputView.string = "(format error — see log)"
             return
         }
-        outputView.string = (obj["formatted"] as? String) ?? ""
+        let formatted = (obj["formatted"] as? String) ?? ""
         let detected = (obj["detected_lang"] as? String) ?? "?"
+        // 検出言語 (auto-detect 結果) でハイライト
+        let highlightLang = (lang == "auto") ? detected : lang
+        let attr = SyntaxHighlight.highlight(formatted, language: highlightLang)
+        outputView.textStorage?.setAttributedString(attr)
         detectedLabel.stringValue = "detected: \(detected)"
     }
 

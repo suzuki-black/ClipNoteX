@@ -141,34 +141,61 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         Settings.launchAtLogin = (launchAtLoginCheck?.state == .on)
     }
 
-    // MARK: - Shortcuts
+    // MARK: - Shortcuts (customizable)
 
     private func shortcutsView() -> NSView {
         let v = NSView()
-        let entries: [(String, String)] = [
-            ("Open clipboard popup",    "⌘⇧V"),
-            ("Capture to DONE LOG",     "⌘⇧D"),
-            ("Quick paste (in popup)",  "1 – 9"),
-            ("Navigate (in popup)",     "↑ ↓"),
-            ("Paste selected",          "⏎"),
-            ("Close popup",             "⎋"),
-        ]
-        let rows: [NSView] = entries.map { (action, key) in
-            let l = NSTextField(labelWithString: action)
-            let r = NSTextField(labelWithString: key)
-            r.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            r.alignment = .right
-            return hRow(l, r)
-        }
-        let note = NSTextField(wrappingLabelWithString:
-            "Custom shortcut editing is planned for v0.3.")
-        note.textColor = .secondaryLabelColor
-        note.font = .systemFont(ofSize: 11)
+        let title = NSTextField(labelWithString: "Global shortcuts")
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
 
-        let stack = NSStackView(views: rows + [note])
+        // ShowHistory recorder
+        let showLbl = NSTextField(labelWithString: "Open clipboard popup:")
+        let showRec = ShortcutRecorder(initial: Settings.showHistoryHotkey)
+        showRec.onChange = { acc in
+            Settings.showHistoryHotkey = acc ?? Settings.defaultShowHistoryHK
+            Settings.registerHotkeys()
+        }
+
+        // DoneCapture recorder
+        let doneLbl = NSTextField(labelWithString: "Capture to DONE LOG:")
+        let doneRec = ShortcutRecorder(initial: Settings.doneCaptureHotkey)
+        doneRec.onChange = { acc in
+            Settings.doneCaptureHotkey = acc ?? Settings.defaultDoneCaptureHK
+            Settings.registerHotkeys()
+        }
+
+        let reset = NSButton(title: "Reset to defaults",
+                             target: self,
+                             action: #selector(resetShortcuts))
+        reset.bezelStyle = .rounded
+
+        let info = NSTextField(wrappingLabelWithString:
+            "Click a field to record a new shortcut. The change applies immediately. " +
+            "Click a populated field again to clear it (defaults will be used).")
+        info.textColor = .secondaryLabelColor
+        info.font = .systemFont(ofSize: 11)
+
+        let fixedTitle = NSTextField(labelWithString: "Inside the popup (not customizable)")
+        fixedTitle.font = .systemFont(ofSize: 13, weight: .semibold)
+        let fixed = NSTextField(wrappingLabelWithString:
+            "1–9 quick paste · ↑↓ navigate · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · ⌘P pin · ⌘⌫ delete · ⎋ close")
+        fixed.textColor = .secondaryLabelColor
+        fixed.font = .systemFont(ofSize: 11)
+
+        showRecorderRef = showRec
+        doneRecorderRef = doneRec
+
+        let stack = NSStackView(views: [
+            title,
+            hRow(showLbl, showRec),
+            hRow(doneLbl, doneRec),
+            reset, info,
+            NSBox.separator(),
+            fixedTitle, fixed,
+        ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
         stack.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(stack)
@@ -176,28 +203,70 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         return v
     }
 
-    // MARK: - Privacy
+    private weak var showRecorderRef: ShortcutRecorder?
+    private weak var doneRecorderRef: ShortcutRecorder?
+
+    @objc private func resetShortcuts() {
+        Settings.showHistoryHotkey = Settings.defaultShowHistoryHK
+        Settings.doneCaptureHotkey = Settings.defaultDoneCaptureHK
+        Settings.registerHotkeys()
+        // Recreate recorders since accelerator setter is private(set)
+        if let view = window?.contentView {
+            view.subviews.forEach { $0.removeFromSuperview() }
+        }
+        setupTabs()
+    }
+
+    // MARK: - Privacy (editable exclusion list)
+
+    private var exclusionTable: ExclusionTableController?
 
     private func privacyView() -> NSView {
         let v = NSView()
-        let title = NSTextField(labelWithString: "Default exclusions")
+        let title = NSTextField(labelWithString: "Excluded sources")
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         let body = NSTextField(wrappingLabelWithString:
-            "ClipNoteX never captures clipboard content originating from these apps:")
+            "Clipboard content coming from any of these sources is silently dropped. " +
+            "Add bundle IDs (e.g. com.1password.1password) or executable names (e.g. KeePassXC).")
         body.textColor = .secondaryLabelColor
         body.font = .systemFont(ofSize: 11)
-        let list = NSTextField(wrappingLabelWithString:
-            "• 1Password\n• Bitwarden\n• KeePassXC")
-        list.font = .systemFont(ofSize: 12)
 
-        let kind = NSTextField(labelWithString: "Also discarded automatically:")
+        let controller = ExclusionTableController()
+        exclusionTable = controller
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.documentView = controller.tableView
+        scroll.heightAnchor.constraint(equalToConstant: 160).isActive = true
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 460).isActive = true
+
+        let addBtn = NSButton(title: "+", target: controller, action: #selector(ExclusionTableController.addEmpty))
+        addBtn.bezelStyle = .smallSquare
+        addBtn.widthAnchor.constraint(equalToConstant: 28).isActive = true
+
+        let removeBtn = NSButton(title: "−", target: controller, action: #selector(ExclusionTableController.removeSelected))
+        removeBtn.bezelStyle = .smallSquare
+        removeBtn.widthAnchor.constraint(equalToConstant: 28).isActive = true
+
+        let resetBtn = NSButton(title: "Reset to defaults",
+                                target: controller,
+                                action: #selector(ExclusionTableController.resetToDefaults))
+        resetBtn.bezelStyle = .rounded
+
+        let btnRow = NSStackView(views: [addBtn, removeBtn, resetBtn])
+        btnRow.orientation = .horizontal
+        btnRow.spacing = 6
+        btnRow.alignment = .centerY
+
+        let kind = NSTextField(labelWithString: "Also discarded automatically")
         kind.font = .systemFont(ofSize: 13, weight: .semibold)
         let kindBody = NSTextField(wrappingLabelWithString:
             "• Pasteboard entries marked Concealed / Transient / AutoGenerated\n• Empty clipboards")
         kindBody.textColor = .secondaryLabelColor
         kindBody.font = .systemFont(ofSize: 11)
 
-        let stack = NSStackView(views: [title, body, list, NSBox.separator(), kind, kindBody])
+        let stack = NSStackView(views: [title, body, scroll, btnRow, NSBox.separator(), kind, kindBody])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -290,7 +359,16 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         let repoBtn = NSButton(title: "GitHub", target: self, action: #selector(openRepo))
         repoBtn.bezelStyle = .rounded
 
-        let stack = NSStackView(views: [appName, version, blurb, repoBtn])
+        let licBtn = NSButton(title: "Third-party licenses…",
+                              target: self,
+                              action: #selector(showLicenses))
+        licBtn.bezelStyle = .rounded
+
+        let btnRow = NSStackView(views: [repoBtn, licBtn])
+        btnRow.orientation = .horizontal
+        btnRow.spacing = 10
+
+        let stack = NSStackView(views: [appName, version, blurb, btnRow])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 12
@@ -305,6 +383,46 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         if let url = URL(string: "https://github.com/suzuki-black/ClipNoteX") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc private func showLicenses() {
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 420),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "Third-party licenses"
+        win.center()
+
+        let scroll = NSScrollView(frame: win.contentView!.bounds)
+        scroll.autoresizingMask = [.width, .height]
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .noBorder
+
+        let text = NSTextView(frame: scroll.bounds)
+        text.isEditable = false
+        text.isSelectable = true
+        text.isAutomaticLinkDetectionEnabled = true
+        text.string = ThirdPartyLicenses.asPlainText()
+        text.font = .systemFont(ofSize: 11)
+        text.textContainerInset = NSSize(width: 12, height: 12)
+        text.minSize = NSSize(width: 0, height: 0)
+        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                              height: CGFloat.greatestFiniteMagnitude)
+        text.isVerticallyResizable = true
+        text.isHorizontallyResizable = false
+        text.autoresizingMask = [.width]
+        text.textContainer?.containerSize = NSSize(width: scroll.contentSize.width,
+                                                   height: CGFloat.greatestFiniteMagnitude)
+        text.textContainer?.widthTracksTextView = true
+
+        scroll.documentView = text
+        win.contentView?.addSubview(scroll)
+
+        let panel = NSWindowController(window: win)
+        panel.showWindow(nil)
+        win.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Layout helpers

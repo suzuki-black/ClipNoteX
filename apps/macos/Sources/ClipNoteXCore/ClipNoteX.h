@@ -89,6 +89,26 @@ int32_t cnx_update_done_overlay_json(const char *args_json);
 char *cnx_export_done_markdown(const char *date);
 
 /**
+ * Get current exclusion rules as JSON array.
+ * Schema mirrors `ExclusionRule`:
+ *   `[{"match":"bundle_id","value":"com.1password.1password"}, ...]`
+ */
+char *cnx_get_exclusions_json(void);
+
+/**
+ * Replace the exclusion rules. Takes effect immediately.
+ * `rules_json` must be a JSON array of `ExclusionRule` objects.
+ */
+int32_t cnx_set_exclusions_json(const char *rules_json);
+
+/**
+ * Clear all currently-registered global hotkeys. Use this before calling
+ * `cnx_register_hotkey` again with a new accelerator to atomically swap
+ * shortcut bindings.
+ */
+int32_t cnx_clear_hotkeys(void);
+
+/**
  * **DESTRUCTIVE**: wipe all clipboard history + DONE LOG + blob files.
  *
  * Use when encryption state is corrupted (e.g. keychain key changed and

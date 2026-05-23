@@ -316,9 +316,10 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         preview.lineBreakMode = .byTruncatingTail
         preview.font = .systemFont(ofSize: 12)
         preview.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        if item.pinned {
-            preview.stringValue = "📌 " + preview.stringValue
-        }
+        // 検索クエリと一致する部分を黄色で強調 (DONE LOG 側と同じヘルパー)
+        let baseText = item.pinned ? "📌 " + displayText : displayText
+        let q = searchField.stringValue
+        preview.attributedStringValue = Self.highlightMatches(in: baseText, query: q, base: preview.font)
 
         // メタ情報 (右下): ソースアプリ · 経過時間
         let metaText = "\(item.source_app) · \(Self.relativeTime(from: item.created_at))"
@@ -361,6 +362,32 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         case "Files":  return "📁"
         default:        return "•"
         }
+    }
+
+    /// Highlight occurrences of `query` in `text` with a yellow background.
+    /// Identical to the DONE LOG helper; kept duplicated to avoid cross-file refs.
+    fileprivate static func highlightMatches(in text: String,
+                                              query: String,
+                                              base baseFont: NSFont?) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: text, attributes: [
+            .font: baseFont ?? NSFont.systemFont(ofSize: 12),
+            .foregroundColor: NSColor.labelColor,
+        ])
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return result }
+        let nsText = text as NSString
+        var searchRange = NSRange(location: 0, length: nsText.length)
+        while searchRange.location < nsText.length {
+            let found = nsText.range(of: q, options: .caseInsensitive, range: searchRange)
+            if found.location == NSNotFound { break }
+            result.addAttributes([
+                .backgroundColor: NSColor.systemYellow.withAlphaComponent(0.55),
+                .foregroundColor: NSColor.black,
+            ], range: found)
+            let next = found.upperBound
+            searchRange = NSRange(location: next, length: max(0, nsText.length - next))
+        }
+        return result
     }
 
     /// "5s" / "12m" / "3h" / "2d" 等の短い相対時刻表現。

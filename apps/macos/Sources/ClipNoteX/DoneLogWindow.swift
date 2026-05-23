@@ -373,8 +373,17 @@ final class DoneLogWindow: NSWindowController, NSWindowDelegate, NSTableViewData
         switch id {
         case "time":   tf.stringValue = item.time
         case "source": tf.stringValue = item.source_app
-        case "body":   tf.stringValue = item.body.replacingOccurrences(of: "\n", with: " ")
-        case "tags":   tf.stringValue = item.tags.map { "#\($0)" }.joined(separator: " ")
+        case "body":
+            // 検索クエリと一致する部分を黄色マーカーで強調
+            let body = item.body.replacingOccurrences(of: "\n", with: " ")
+            tf.attributedStringValue = Self.highlightMatches(in: body,
+                                                              query: filterText,
+                                                              base: tf.font)
+        case "tags":
+            let joined = item.tags.map { "#\($0)" }.joined(separator: " ")
+            tf.attributedStringValue = Self.highlightMatches(in: joined,
+                                                              query: filterText,
+                                                              base: tf.font)
         default: break
         }
         cell.addSubview(tf)
@@ -422,5 +431,33 @@ final class DoneLogWindow: NSWindowController, NSWindowDelegate, NSTableViewData
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         return f.date(from: s)
+    }
+
+    /// Wrap each case-insensitive occurrence of `query` in `text` with a
+    /// yellow background highlight. Returns an NSAttributedString that can
+    /// be assigned to NSTextField.attributedStringValue.
+    private static func highlightMatches(in text: String,
+                                         query: String,
+                                         base baseFont: NSFont?) -> NSAttributedString {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: baseFont ?? NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        let result = NSMutableAttributedString(string: text, attributes: attrs)
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return result }
+        let nsText = text as NSString
+        var searchRange = NSRange(location: 0, length: nsText.length)
+        while searchRange.location < nsText.length {
+            let found = nsText.range(of: q, options: .caseInsensitive, range: searchRange)
+            if found.location == NSNotFound { break }
+            result.addAttributes([
+                .backgroundColor: NSColor.systemYellow.withAlphaComponent(0.55),
+                .foregroundColor: NSColor.black,
+            ], range: found)
+            let next = found.upperBound
+            searchRange = NSRange(location: next, length: max(0, nsText.length - next))
+        }
+        return result
     }
 }

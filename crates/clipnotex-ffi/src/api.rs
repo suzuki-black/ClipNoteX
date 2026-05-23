@@ -551,6 +551,86 @@ pub unsafe extern "C" fn cnx_export_done_markdown(date: *const c_char) -> *mut c
 }
 
 // ---------------------------------------------------------------------------
+// Exclusion rules (runtime mutable)
+// ---------------------------------------------------------------------------
+
+/// Get current exclusion rules as JSON array.
+/// Schema mirrors `ExclusionRule`:
+///   `[{"match":"bundle_id","value":"com.1password.1password"}, ...]`
+#[no_mangle]
+pub extern "C" fn cnx_get_exclusions_json() -> *mut c_char {
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return std::ptr::null_mut();
+        }
+    };
+    let rules = st.settings.lock().exclusions.clone();
+    match serde_json::to_string(&rules) {
+        Ok(j) => into_c_string(j),
+        Err(e) => {
+            set_last_error(format!("serialize exclusions: {e}"));
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Replace the exclusion rules. Takes effect immediately.
+/// `rules_json` must be a JSON array of `ExclusionRule` objects.
+#[no_mangle]
+pub unsafe extern "C" fn cnx_set_exclusions_json(rules_json: *const c_char) -> i32 {
+    use clipnotex_core::settings::ExclusionRule;
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return CnxStatus::NotInitialized as i32;
+        }
+    };
+    let s = match cstr_to_str(rules_json) {
+        Some(s) => s,
+        None => {
+            set_last_error("rules_json null");
+            return CnxStatus::InvalidArgument as i32;
+        }
+    };
+    let rules: Vec<ExclusionRule> = match serde_json::from_str(s) {
+        Ok(r) => r,
+        Err(e) => {
+            set_last_error(format!("parse rules: {e}"));
+            return CnxStatus::InvalidArgument as i32;
+        }
+    };
+    st.filter.replace_rules(rules.clone());
+    st.settings.lock().exclusions = rules;
+    tracing::info!("exclusion rules updated");
+    CnxStatus::Ok as i32
+}
+
+// ---------------------------------------------------------------------------
+// Hotkey (runtime mutable)
+// ---------------------------------------------------------------------------
+
+/// Clear all currently-registered global hotkeys. Use this before calling
+/// `cnx_register_hotkey` again with a new accelerator to atomically swap
+/// shortcut bindings.
+#[no_mangle]
+pub extern "C" fn cnx_clear_hotkeys() -> i32 {
+    let st = match try_state() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(e);
+            return CnxStatus::NotInitialized as i32;
+        }
+    };
+    if let Some(svc) = &st.hotkey {
+        svc.clear();
+    }
+    CnxStatus::Ok as i32
+}
+
+// ---------------------------------------------------------------------------
 // Maintenance — reset (recovery from broken encryption state)
 // ---------------------------------------------------------------------------
 

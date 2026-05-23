@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = cnx_start_capture_loop()
 
         // 3) ホットキー (バックグラウンドからの呼び出し可)
-        registerHotkeys()
+        Settings.registerHotkeys()
         setHotkeyCallback()
 
         // global-hotkey は内部チャネルを持っていて pump() を定期的に呼ぶ必要がある。
@@ -48,17 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 4) ステータスバー UI
         statusController = StatusBarController()
-    }
-
-    private func registerHotkeys() {
-        let table: [(Int32, String)] = [
-            (1, "Cmd+Shift+V"), // ShowHistory
-            (6, "Cmd+Shift+D"), // DoneCapture
-        ]
-        for (id, acc) in table {
-            let r = acc.withCString { cstr in cnx_register_hotkey(id, cstr) }
-            NSLog("hotkey register \(id)=\(acc) → \(r)")
-        }
     }
 
     private func setHotkeyCallback() {
