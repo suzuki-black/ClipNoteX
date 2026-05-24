@@ -48,7 +48,9 @@ ClipNoteX takes the opposite approach:
 - **📓 DONE LOG** — Promote any clipboard item (or quick-capture freeform text) into a daily work log. Tag, edit, export as Markdown.
 - **📌 Pin & protect** — Pinned clips survive quota eviction.
 - **🛠 Reset switch** — One-button data wipe for recovering from broken encryption state.
-- **⌨️ Keyboard-first** — Open with `⌘⇧V`, paste with `⏎` or `1…9`, never touch the trackpad.
+- **⌨️ Keyboard-first** — `⌘⇧V` toggles the popup (no mouse needed to close), paste with `⏎` or `1…9`, never touch the trackpad. All global shortcuts customizable from Preferences.
+- **🎨 Syntax-highlighted Format Paste** — JSON / SQL / JS / TS / HTML / CSS / Markdown preview is colorized before you commit.
+- **🟡 Search highlight** — Live filter matches are marked in both the clipboard popup and the DONE LOG list.
 
 ---
 
@@ -174,10 +176,12 @@ Generates fresh in-memory keys each run — useful while iterating, but every re
 
 ### Global
 
-| Key       | Action                                       |
-|-----------|----------------------------------------------|
-| `⌘⇧V`     | Open clipboard history popup                 |
-| `⌘⇧D`     | Capture current clipboard to DONE LOG        |
+| Key       | Action                                                            |
+|-----------|-------------------------------------------------------------------|
+| `⌘⇧V`     | **Toggle** the clipboard history popup (press again to dismiss)   |
+| `⌘⇧D`     | Capture current clipboard to DONE LOG                             |
+
+Both shortcuts are user-customizable via **Preferences → Shortcuts**.
 
 ### Inside the popup
 
@@ -239,7 +243,7 @@ NSPasteboard change
 
 - [x] **v0.1** — initial Tauri prototype (now retired; tagged `v0.1-tauri-legacy`)
 - [x] **v0.2** — Swift + AppKit native shell, image paste, Clipy-compatible reorder, Reset feature
-- [ ] **v0.3** — customizable hotkeys, settings UI for exclusion rules, syntax-highlighted preview
+- [x] **v0.3** — customizable hotkeys, exclusion-rule GUI, syntax-highlighted Format Paste, search highlight, third-party license dialog, hotkey toggle
 - [ ] **v0.4** — Windows version (WinUI 3 frontend on the same Rust core)
 - [ ] **v0.5** — opt-in iCloud-encrypted sync between Macs
 - [ ] **v0.6** — plugin API for custom formatters
@@ -320,7 +324,9 @@ ClipNoteX はそのすべての逆を行きます — **完全オフライン・
 - **📓 DONE LOG** — クリップボードや手書きメモを作業日誌に昇格。タグ付け・編集・Markdown エクスポート
 - **📌 ピン留め** — ピン留めはクォータ削除から保護
 - **🛠 リセット機能** — 「壊れた暗号化状態」(decrypt failed 大量警告) からの復帰用ワンボタン全削除
-- **⌨️ キーボード完結** — `⌘⇧V` で開いて `⏎` / `1〜9` でペースト。トラックパッド不要
+- **⌨️ キーボード完結** — `⌘⇧V` でトグル表示（再度押すと閉じる）→ `⏎` / `1〜9` でペースト。トラックパッド不要。全ホットキーは Preferences で変更可
+- **🎨 シンタックスハイライト付きフォーマットペースト** — JSON / SQL / JS / TS / HTML / CSS / Markdown のプレビューに色付け
+- **🟡 検索ハイライト** — クリップボードポップアップ・DONE LOG どちらも一致箇所を黄色マーカー
 
 ---
 
@@ -349,10 +355,12 @@ CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 
 ### グローバル
 
-| キー  | 動作                                     |
-|-------|------------------------------------------|
-| `⌘⇧V` | 履歴ポップアップを開く                   |
-| `⌘⇧D` | 現在のクリップボードを DONE LOG にキャプチャ |
+| キー  | 動作                                                                |
+|-------|---------------------------------------------------------------------|
+| `⌘⇧V` | 履歴ポップアップを**トグル**（もう一度押すと閉じる、Clipy 風）       |
+| `⌘⇧D` | 現在のクリップボードを DONE LOG にキャプチャ                         |
+
+両方とも **Preferences → Shortcuts** で自由に変更できます。
 
 ### ポップアップ内
 
@@ -397,7 +405,7 @@ CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 
 - [x] **v0.1** — Tauri 試作（廃止、タグ `v0.1-tauri-legacy` で退避済み）
 - [x] **v0.2** — Swift + AppKit ネイティブ実装、画像ペースト、Clipy 互換並び替え、リセット機能
-- [ ] **v0.3** — ショートカットカスタマイズ、除外ルール GUI、シンタックスハイライト
+- [x] **v0.3** — ショートカットカスタマイズ、除外ルール GUI、フォーマットペーストのシンタックスハイライト、検索ハイライト、ライセンス情報ダイアログ、ホットキートグル
 - [ ] **v0.4** — Windows 版（同じ Rust コア＋ WinUI 3）
 - [ ] **v0.5** — opt-in iCloud 暗号化同期
 - [ ] **v0.6** — 独自フォーマッタ用プラグイン API

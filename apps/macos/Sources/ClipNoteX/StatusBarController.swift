@@ -30,7 +30,7 @@ final class StatusBarController {
         ) { [weak self] note in
             let id = note.userInfo?["id"] as? Int32 ?? 0
             switch id {
-            case 1: self?.openSearchPanel() // ShowHistory (Cmd+Shift+V)
+            case 1: self?.toggleSearchPanel() // ShowHistory (Cmd+Shift+V) → toggle
             case 6: self?.captureCurrentClipboardAsDoneEntry() // Cmd+Shift+D
             default: break
             }
@@ -44,12 +44,18 @@ final class StatusBarController {
         if event?.type == .rightMouseUp {
             showContextMenu()
         } else {
-            openSearchPanel()
+            // ステータスアイコン左クリックもトグル動作 (同じアイコンを再度押したら閉じる)
+            toggleSearchPanel()
         }
     }
 
     func openSearchPanel() {
         SearchPanel.shared.show(near: statusItem)
+    }
+
+    /// グローバルホットキー / ステータスアイコンクリック共通のトグル動作。
+    func toggleSearchPanel() {
+        _ = SearchPanel.shared.toggle(near: statusItem)
     }
 
     private func showContextMenu() {

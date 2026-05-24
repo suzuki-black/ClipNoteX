@@ -99,6 +99,18 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
 
     // MARK: - Show / hide
 
+    /// 既に開いていたら閉じて nil を返し、閉じていたら開いて true を返す。
+    /// グローバルホットキーの「もう一度押したら消える」挙動を実現する。
+    @discardableResult
+    func toggle(near statusItem: NSStatusItem?) -> Bool {
+        if let w = window, w.isVisible {
+            w.orderOut(nil)
+            return false
+        }
+        show(near: statusItem)
+        return true
+    }
+
     func show(near statusItem: NSStatusItem?) {
         reload(query: "")
         searchField.stringValue = ""
