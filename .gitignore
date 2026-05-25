@@ -20,3 +20,6 @@ crates/clipnotex-ffi/include/
 # Logs
 *.log
 apps/macos/build/
+
+# 引継書 (個人/ローカル用、git 管理外)
+HANDOFF_*.md
