@@ -40,7 +40,7 @@ ClipNoteX takes the opposite approach:
 ## Features
 
 - **🔒 Encrypted history** — Every entry is sealed with XChaCha20-Poly1305 AEAD. Keys live in the macOS Keychain (Keyring v1 service `ClipNoteX`).
-- **⚡ Native menubar UI** — `NSStatusItem` + `NSPanel` (non-activating). Pops up at the cursor in milliseconds; never steals focus from your text editor.
+- **⚡ Native menubar UI** — `NSStatusItem` + `NSPanel` (non-activating). Pops up at the cursor in milliseconds; never steals focus from your text editor. Compact 360 × 400 single-line rows (Clipy-grade density) — search is always faster than browsing.
 - **🧠 Clipy-compatible reorder** — Pasted items move to the top of the history. Same content re-copied bumps the existing entry. No silent dedup losses.
 - **🖼 Full payload support** — Text, RTF, HTML, images, PDFs and file lists are all captured and round-tripped. Large payloads (>256 KiB) are content-addressed and offloaded to encrypted `blobs/` to keep the DB compact.
 - **✨ Format Paste** — Copy messy JSON, paste perfect JSON. Live preview before commit. Supports JSON · SQL · Markdown · HTML · CSS · JavaScript · TypeScript · plain text.
@@ -57,22 +57,15 @@ ClipNoteX takes the opposite approach:
 ## Demo
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  🔍  Search clipboard…                                │
-├──────────────────────────────────────────────────────┤
-│  1  📝  Hello from ClipNoteX                          │
-│         Safari · 12s                                   │
-├──────────────────────────────────────────────────────┤
-│  2  🖼  (Image)                                        │
-│         Preview · 1m                                   │
-├──────────────────────────────────────────────────────┤
-│  3  📌  SELECT * FROM users WHERE id = 1               │
-│         Terminal · 3h                                  │
-├──────────────────────────────────────────────────────┤
-│  4  📝  Fixed the race condition in capture loop       │
-│         Slack · 12:30                                  │
-└──────────────────────────────────────────────────────┘
-  ↑↓ nav · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · ⌘P pin · ⌘⌫ delete · 1–9 quick · ⎋ close
+┌──────────────────────────────────────────────────┐
+│  🔍 Search clipboard…              📓  ⚙        │
+├──────────────────────────────────────────────────┤
+│ 1 📝 Hello from ClipNoteX           Safari · 12s │
+│ 2 🖼 (Image)                       Preview · 1m │
+│ 3 📌 SELECT * FROM users WHERE …  Terminal · 3h │
+│ 4 📝 Fixed the race condition…       Slack · 12h │
+└──────────────────────────────────────────────────┘
+  ↑↓ · ⏎ paste · ⇧⏎ plain · ⌥⏎ fmt · ⌘P pin · ⌘⌫ del · 1–9 · ⌘L log · ⌘, prefs · ⎋
 ```
 
 **Format Paste:**
@@ -194,8 +187,12 @@ Both shortcuts are user-customizable via **Preferences → Shortcuts**.
 | `⌘P`          | Pin / unpin the selected item                         |
 | `⌘⌫`          | Delete the selected item                              |
 | `1` … `9`     | Quick-paste the Nth item                              |
+| `⌘L`          | Open the DONE LOG window                              |
+| `⌘,`          | Open Preferences                                      |
 | `⎋`           | Close the popup                                       |
 | any character | Live-filter the history                               |
+
+The popup also exposes 📓 / ⚙ buttons next to the search field — useful for users whose menubar right-click is taken over by another app (notch utilities, etc.).
 
 ---
 
@@ -316,7 +313,7 @@ ClipNoteX はそのすべての逆を行きます — **完全オフライン・
 ## 主な機能
 
 - **🔒 暗号化履歴** — XChaCha20-Poly1305 AEAD で全エントリを暗号化。鍵は macOS Keychain (`ClipNoteX` サービス) に保管
-- **⚡ ネイティブメニューバー UI** — `NSStatusItem` + 非アクティブ化 `NSPanel`。カーソル付近に即時ポップアップし、エディタのフォーカスを奪わない
+- **⚡ ネイティブメニューバー UI** — `NSStatusItem` + 非アクティブ化 `NSPanel`。カーソル付近に即時ポップアップし、エディタのフォーカスを奪わない。1 行レイアウト 360×400 で Clipy 級の情報密度（検索が速いので、ブラウズより常に有利）
 - **🧠 Clipy 互換挙動** — ペーストしたアイテムは履歴の先頭に移動。同じ内容を再コピーすると既存エントリを浮上（黙って消す dedup 損失なし）
 - **🖼 全ペイロード対応** — テキスト・RTF・HTML・画像・PDF・ファイルリストすべてキャプチャ＆ペースト可能。256 KiB 超は content-addressed 暗号化 blob として `blobs/` に格納し DB をコンパクトに保つ
 - **✨ フォーマットペースト** — 崩れた JSON をコピー → 整形プレビュー → そのままペースト。JSON · SQL · Markdown · HTML · CSS · JS · TS · プレーンに対応
@@ -373,8 +370,12 @@ CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 | `⌘P`       | 選択アイテムをピン留め / 解除                 |
 | `⌘⌫`       | 選択アイテムを削除                            |
 | `1`〜`9`   | n 番目を即ペースト                            |
+| `⌘L`       | DONE LOG ウィンドウを開く                     |
+| `⌘,`       | Preferences を開く                            |
 | `⎋`        | 閉じる                                        |
 | 文字       | 履歴をライブフィルタ                          |
+
+検索欄の横に 📓 / ⚙ ボタンも配置しています（ノッチ系常駐アプリでアイコン右クリックが奪われているユーザ向け）。
 
 ---
 

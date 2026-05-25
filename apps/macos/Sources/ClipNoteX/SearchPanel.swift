@@ -25,7 +25,9 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
 
     private init() {
         let panel = NonActivatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+            // Clipy/Maccy 並みのコンパクトサイズ。元は 480×520 だったが、画面占有が大きく
+             // 視界を遮るとの指摘あり。1 行レイアウト + 小さめフォントで切り詰めた。
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 400),
             styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -55,6 +57,38 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
 
+        // 検索欄右端のアクションボタン群 (アイコン右クリックを使わずに開けるように):
+        //   - 📓 DONE LOG (⌘L)
+        //   - ⚙  Preferences (⌘,)
+        // ノッチ系常駐アプリで右クリックが奪われるユーザ向けの保険でもある。
+        let doneButton = NSButton()
+        doneButton.bezelStyle = .recessed
+        doneButton.isBordered = false
+        doneButton.imagePosition = .imageOnly
+        if let img = NSImage(systemSymbolName: "book.closed", accessibilityDescription: "DONE LOG") {
+            doneButton.image = img
+        } else {
+            doneButton.title = "📓"
+        }
+        doneButton.target = self
+        doneButton.action = #selector(openDoneLog)
+        doneButton.toolTip = "Open DONE LOG (⌘L)"
+        doneButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let prefsButton = NSButton()
+        prefsButton.bezelStyle = .recessed
+        prefsButton.isBordered = false
+        prefsButton.imagePosition = .imageOnly
+        if let img = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Preferences") {
+            prefsButton.image = img
+        } else {
+            prefsButton.title = "⚙"
+        }
+        prefsButton.target = self
+        prefsButton.action = #selector(openPreferences)
+        prefsButton.toolTip = "Preferences (⌘,)"
+        prefsButton.translatesAutoresizingMaskIntoConstraints = false
+
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -65,35 +99,54 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         table.headerView = nil
         table.allowsMultipleSelection = false
         table.usesAlternatingRowBackgroundColors = true
-        table.rowHeight = 38
+        table.rowHeight = 22
         table.target = self
         table.doubleAction = #selector(rowDoubleClicked)
 
         let col = NSTableColumn(identifier: .init("c"))
-        col.width = 460
+        col.width = 340
         table.addTableColumn(col)
 
-        let hint = NSTextField(labelWithString: "↑↓ nav · ⏎ paste · ⇧⏎ plain · ⌥⏎ format · ⌘P pin · ⌘⌫ delete · 1–9 quick · ⎋ close")
-        hint.font = .systemFont(ofSize: 10)
-        hint.textColor = .secondaryLabelColor
+        // Clipy 風コンパクト: ヒント行は短く、フォントも 9pt に。
+        let hint = NSTextField(labelWithString: "↑↓ · ⏎ paste · ⇧⏎ plain · ⌥⏎ fmt · ⌘P pin · ⌘⌫ del · 1–9 · ⌘L log · ⌘, prefs · ⎋")
+        hint.font = .systemFont(ofSize: 9)
+        hint.textColor = .tertiaryLabelColor
+        hint.lineBreakMode = .byTruncatingTail
         hint.translatesAutoresizingMaskIntoConstraints = false
 
         content.addSubview(searchField)
+        content.addSubview(doneButton)
+        content.addSubview(prefsButton)
         content.addSubview(scroll)
         content.addSubview(hint)
 
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: content.topAnchor, constant: 32),
-            searchField.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
-            searchField.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+            // タイトルバー裏に来ない最小限の天井 (信号機分: 22pt) + 6pt
+            searchField.topAnchor.constraint(equalTo: content.topAnchor, constant: 28),
+            searchField.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 8),
+            // 検索欄の右端はボタン群の左に揃える
+            searchField.trailingAnchor.constraint(equalTo: doneButton.leadingAnchor, constant: -4),
 
-            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            // 📓 DONE LOG ボタン
+            doneButton.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
+            doneButton.trailingAnchor.constraint(equalTo: prefsButton.leadingAnchor, constant: -2),
+            doneButton.widthAnchor.constraint(equalToConstant: 20),
+            doneButton.heightAnchor.constraint(equalToConstant: 20),
+
+            // ⚙ Preferences ボタン
+            prefsButton.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
+            prefsButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -8),
+            prefsButton.widthAnchor.constraint(equalToConstant: 20),
+            prefsButton.heightAnchor.constraint(equalToConstant: 20),
+
+            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 4),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: hint.topAnchor, constant: -4),
+            scroll.bottomAnchor.constraint(equalTo: hint.topAnchor, constant: -2),
 
-            hint.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
-            hint.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -6),
+            hint.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 8),
+            hint.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -8),
+            hint.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -4),
         ])
     }
 
@@ -203,6 +256,19 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
     }
 
     /// 選択アイテムを削除し、リスト再読込。
+    /// Preferences ウィンドウを開く。検索パネル右上の歯車ボタン / ⌘, から呼ばれる。
+    /// パネル自体は閉じる (Preferences が前面 / activate するので)。
+    @objc fileprivate func openPreferences() {
+        hide()
+        PreferencesWindow.show()
+    }
+
+    /// DONE LOG ウィンドウを開く。検索パネル右上の 📓 ボタン / ⌘L から呼ばれる。
+    @objc fileprivate func openDoneLog() {
+        hide()
+        DoneLogWindow.show()
+    }
+
     fileprivate func deleteSelected() {
         guard let item = currentItem() else { return }
         let r = item.id.withCString { cstr in cnx_delete_item(cstr) }
@@ -303,60 +369,61 @@ final class SearchPanel: NSWindowController, NSWindowDelegate, NSTableViewDataSo
         let cell = NSTableCellView()
         cell.translatesAutoresizingMaskIntoConstraints = false
 
-        // 番号 (1〜9)
-        let idx = NSTextField(labelWithString: row < 9 ? "\(row + 1)" : " ")
-        idx.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        idx.textColor = .secondaryLabelColor
-        idx.alignment = .right
-        idx.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        // Clipy 風コンパクト 1 行レイアウト:
+        //   [N] [kind] preview text ……          source · 5s
+        // 1 行 22pt 高に収め、ソース/経過時刻は右寄せの小さな副情報として一列化。
 
-        // 種別アイコン (絵文字でシンプルに)
+        // 番号 (1〜9)。10 以上は空白扱いなので 1 桁固定幅 + 左寄せでよい
+        // (旧コードは右揃え + 14pt 幅で左に余白ができていた)
+        let idx = NSTextField(labelWithString: row < 9 ? "\(row + 1)" : " ")
+        idx.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        idx.textColor = .secondaryLabelColor
+        idx.alignment = .left
+        idx.widthAnchor.constraint(equalToConstant: 10).isActive = true
+
+        // 種別アイコン
         let kindIcon = NSTextField(labelWithString: Self.kindEmoji(item.kind))
-        kindIcon.font = .systemFont(ofSize: 13)
-        kindIcon.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        kindIcon.font = .systemFont(ofSize: 11)
+        kindIcon.widthAnchor.constraint(equalToConstant: 14).isActive = true
         kindIcon.toolTip = item.kind
 
-        // プレビュー (本文) — 上段
-        let displayText: String = {
-            if item.preview.isEmpty {
-                // バイナリ系 (Image/PDF/Files) は preview なしのことがある
-                return "(\(item.kind))"
-            }
-            return item.preview.replacingOccurrences(of: "\n", with: " ")
-        }()
-        let preview = NSTextField(labelWithString: displayText)
-        preview.lineBreakMode = .byTruncatingTail
-        preview.font = .systemFont(ofSize: 12)
-        preview.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        // 検索クエリと一致する部分を黄色で強調 (DONE LOG 側と同じヘルパー)
+        // プレビュー本文 (左、可伸長)
+        let displayText: String = item.preview.isEmpty
+            ? "(\(item.kind))"
+            : item.preview.replacingOccurrences(of: "\n", with: " ")
         let baseText = item.pinned ? "📌 " + displayText : displayText
+        let preview = NSTextField(labelWithString: baseText)
+        preview.lineBreakMode = .byTruncatingTail
+        preview.font = .systemFont(ofSize: 11)
+        preview.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        preview.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let q = searchField.stringValue
         preview.attributedStringValue = Self.highlightMatches(in: baseText, query: q, base: preview.font)
 
-        // メタ情報 (右下): ソースアプリ · 経過時間
-        let metaText = "\(item.source_app) · \(Self.relativeTime(from: item.created_at))"
+        // メタ情報 (右、固定幅): ソースアプリ + 経過時間。長すぎる app 名は短縮。
+        let appShort = item.source_app.count > 12
+            ? String(item.source_app.prefix(11)) + "…"
+            : item.source_app
+        let metaText = "\(appShort) · \(Self.relativeTime(from: item.created_at))"
         let meta = NSTextField(labelWithString: metaText)
-        meta.font = .systemFont(ofSize: 10)
-        meta.textColor = .secondaryLabelColor
+        meta.font = .systemFont(ofSize: 9)
+        meta.textColor = .tertiaryLabelColor
         meta.lineBreakMode = .byTruncatingTail
+        meta.alignment = .right
+        meta.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        meta.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        meta.toolTip = "\(item.source_app) · \(Self.relativeTime(from: item.created_at))"
 
-        // 縦に preview / meta を積む
-        let textStack = NSStackView(views: [preview, meta])
-        textStack.orientation = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 1
-        textStack.distribution = .fill
-
-        let h = NSStackView(views: [idx, kindIcon, textStack])
+        let h = NSStackView(views: [idx, kindIcon, preview, meta])
         h.orientation = .horizontal
-        h.spacing = 8
+        h.spacing = 6
         h.alignment = .centerY
         h.translatesAutoresizingMaskIntoConstraints = false
 
         cell.addSubview(h)
         NSLayoutConstraint.activate([
-            h.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 12),
-            h.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -12),
+            h.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
+            h.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
             h.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         cell.textField = preview
@@ -449,6 +516,12 @@ final class NonActivatingPanel: NSPanel {
                 return true
             case 35: // kVK_ANSI_P
                 SearchPanel.shared.togglePinSelected()
+                return true
+            case 43: // kVK_ANSI_Comma  →  ⌘, で Preferences
+                SearchPanel.shared.openPreferences()
+                return true
+            case 37: // kVK_ANSI_L  →  ⌘L で DONE LOG
+                SearchPanel.shared.openDoneLog()
                 return true
             default: break
             }
