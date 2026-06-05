@@ -18,7 +18,6 @@ use clipnotex_core::{model::PayloadData, CnxError, Result};
 use clipnotex_format::{detect, FormatOptions, FormatService, Language};
 use ime::{log_ime_state, ImeState};
 use std::sync::Arc;
-use std::time::Duration;
 
 // ---------------------------------------------------------------------------
 // PasteMode
@@ -53,7 +52,6 @@ pub struct FormatRequest {
 pub struct PasteController {
     writer: Arc<dyn ClipboardWriter>,
     guard: Arc<SelfWriteGuard>,
-    restore_delay: Duration,
     format_svc: FormatService,
 }
 
@@ -62,7 +60,6 @@ impl PasteController {
         Self {
             writer,
             guard,
-            restore_delay: Duration::from_millis(150),
             format_svc: FormatService::new(),
         }
     }
@@ -134,28 +131,31 @@ impl PasteController {
     // Stage A
     // -----------------------------------------------------------------------
 
-    /// Stage A: snapshot → write → synthesize Cmd/Ctrl+V → restore.
-    /// Always works; may briefly expose the item to other clipboard watchers.
+    /// Stage A: write the chosen item to the clipboard, then synthesize Cmd/Ctrl+V.
+    ///
+    /// **元クリップボードへの restore は行わない (Clipy/Maccy 互換)。**
+    ///
+    /// 以前は「ペースト → 150ms 後に元クリップボードへ書き戻す」設計だったが、
+    /// メモ.app / Slack / メール等のリッチアプリは画像やリッチテキストを
+    /// *遅延読み込み (NSPasteboard promise)* するため、Cmd+V を受けてから実際に
+    /// ペーストボードを読むまでに 150ms 以上かかることがある。restore がそれより
+    /// 先に走ると、貼り先は「書き戻された元の内容」or 空を読んでしまい、
+    /// **画像ペーストが失敗する**。テキストは即時読むので問題が顕在化しなかった。
+    ///
+    /// ペーストした内容をクリップボードに残すのは Clipy/Maccy と同じ挙動であり、
+    /// 「ペースト = 履歴の先頭に昇格 (bump_to_top)」とも一貫する。再キャプチャは
+    /// SelfWriteGuard に digest を登録済みなので発生しない。
     async fn paste_stage_a(
         &self,
         payloads: Vec<PayloadData>,
         digest: [u8; 32],
     ) -> Result<()> {
-        tracing::info!("paste_stage_a: snapshot clipboard for restore");
-        let backup = self.writer.snapshot_for_restore()?;
-        tracing::info!(backup_n = backup.len(), "paste_stage_a: backup ready");
         self.guard.register(digest);
-        tracing::info!("paste_stage_a: writing payloads to clipboard");
+        tracing::info!(n = payloads.len(), "paste_stage_a: writing payloads to clipboard");
         self.writer.write(&payloads)?;
         tracing::info!("paste_stage_a: synthesize keystroke (Cmd+V)");
         synthesize_paste_keystroke()?;
-        tracing::info!("paste_stage_a: keystroke sent, waiting before restore");
-        tokio::time::sleep(self.restore_delay).await;
-        tracing::info!("paste_stage_a: restoring original clipboard");
-        if let Err(e) = self.writer.write(&backup) {
-            tracing::warn!(?e, "failed to restore clipboard after Stage A paste");
-        }
-        tracing::info!("paste_stage_a: DONE");
+        tracing::info!("paste_stage_a: DONE (clipboard retains pasted content)");
         Ok(())
     }
 
