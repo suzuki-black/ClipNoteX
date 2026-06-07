@@ -35,3 +35,51 @@ pub enum HotkeyId {
     PasteFull,
     DoneCapture,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clip_id_is_unique() {
+        let a = ClipId::new();
+        let b = ClipId::new();
+        assert_ne!(a, b, "freshly generated ClipIds must differ");
+    }
+
+    #[test]
+    fn clip_id_as_bytes_is_16() {
+        assert_eq!(ClipId::new().as_bytes().len(), 16);
+    }
+
+    #[test]
+    fn clip_id_serde_is_transparent_string() {
+        // #[serde(transparent)] => serializes exactly like the inner Ulid string.
+        let id = ClipId::new();
+        let json = serde_json::to_string(&id).unwrap();
+        assert_eq!(json, format!("\"{id}\""));
+        let back: ClipId = serde_json::from_str(&json).unwrap();
+        assert_eq!(id, back);
+    }
+
+    #[test]
+    fn hotkey_id_ordering_matches_declaration() {
+        // derive(Ord) orders by variant declaration order; relied on by the
+        // BTreeMap<HotkeyId, _> in Settings.
+        assert!(HotkeyId::ShowHistory < HotkeyId::ShowSnippets);
+        assert!(HotkeyId::ShowSnippets < HotkeyId::DoneCapture);
+    }
+
+    #[test]
+    fn hotkey_id_serde_roundtrip() {
+        for hk in [
+            HotkeyId::ShowHistory,
+            HotkeyId::PastePlain,
+            HotkeyId::DoneCapture,
+        ] {
+            let json = serde_json::to_string(&hk).unwrap();
+            let back: HotkeyId = serde_json::from_str(&json).unwrap();
+            assert_eq!(hk, back);
+        }
+    }
+}

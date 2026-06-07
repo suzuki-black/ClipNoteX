@@ -349,7 +349,8 @@ final class PreferencesWindow: NSWindowController, NSWindowDelegate {
         let appName = NSTextField(labelWithString: "ClipNoteX")
         appName.font = .systemFont(ofSize: 22, weight: .semibold)
 
-        let version = NSTextField(labelWithString: "Version 0.1.0-dev")
+        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.4.0"
+        let version = NSTextField(labelWithString: "Version \(shortVersion)")
         version.textColor = .secondaryLabelColor
 
         let blurb = NSTextField(wrappingLabelWithString:

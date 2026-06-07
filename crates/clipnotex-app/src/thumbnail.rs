@@ -12,6 +12,7 @@
 
 use clipnotex_core::{ids::ClipId, CnxError, Result};
 use image::imageops::FilterType;
+use image::ImageFormat;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -116,7 +117,12 @@ impl ThumbnailService {
 /// Called inside `spawn_blocking`. Never blocks the async runtime.
 fn generate_thumbnail(png_bytes: &[u8], out_path: &Path) -> Result<()> {
     // Decode — concern §6: image crate is used for all decoding.
-    let img = image::load_from_memory(png_bytes)
+    // Pin the decoder to PNG instead of byte-sniffing the format. Inputs are
+    // always PNG (macOS NSPasteboard PNG / Windows DIB re-encoded to PNG), so
+    // format auto-detection only widens the attack surface — a malicious
+    // clipboard payload with e.g. TIFF/JPEG magic bytes would otherwise be
+    // routed into transitively-included decoders we never intend to use.
+    let img = image::load_from_memory_with_format(png_bytes, ImageFormat::Png)
         .map_err(|e| CnxError::Other(format!("thumbnail decode: {e}")))?;
 
     // Lanczos3 for quality, but a 32×32 output means quality matters less
@@ -163,5 +169,27 @@ mod tests {
         let out = tmp.path().join("thumb.png");
         let result = generate_thumbnail(&[], &out);
         assert!(result.is_err(), "empty input should return Err");
+    }
+
+    /// Security regression (v0.4): the decoder is pinned to PNG, so a payload
+    /// that is a *valid* non-PNG image (here JPEG) must be rejected rather than
+    /// silently routed through a format-auto-detect path into another decoder.
+    #[test]
+    fn non_png_input_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let out = tmp.path().join("thumb.png");
+
+        // Encode a genuine 1×1 JPEG. Under the old load_from_memory() this would
+        // have decoded fine; under the PNG-pinned decoder it must fail.
+        let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([10, 20, 30, 255]));
+        let mut jpeg = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .to_rgb8()
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+
+        let result = generate_thumbnail(&jpeg, &out);
+        assert!(result.is_err(), "non-PNG image must be rejected by the PNG-pinned decoder");
+        assert!(!out.exists());
     }
 }

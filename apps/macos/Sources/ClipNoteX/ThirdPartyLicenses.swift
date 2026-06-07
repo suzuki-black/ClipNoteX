@@ -1,6 +1,6 @@
 // ThirdPartyLicenses.swift — bundled list of third-party software.
 //
-// In v0.3 this is hand-maintained (rebuild manually when adding deps).
+// As of v0.4 this is hand-maintained (rebuild manually when adding deps).
 // In v1.0 we'll wire `cargo-about generate` into CI and bundle a JSON.
 //
 // Sources of truth:
@@ -33,6 +33,8 @@ enum ThirdPartyLicenses {
         .init(name: "chrono",           version: "0.4.x",   license: "MIT/Apache-2.0", url: "https://github.com/chronotope/chrono"),
         .init(name: "thiserror",        version: "1.x",     license: "MIT/Apache-2.0", url: "https://github.com/dtolnay/thiserror"),
         .init(name: "anyhow",           version: "1.x",     license: "MIT/Apache-2.0", url: "https://github.com/dtolnay/anyhow"),
+        .init(name: "async-trait",      version: "0.1.x",   license: "MIT/Apache-2.0", url: "https://github.com/dtolnay/async-trait"),
+        .init(name: "sqlformat",        version: "0.3.x",   license: "MIT/Apache-2.0", url: "https://github.com/shssoichiro/sqlformat-rs"),
         .init(name: "tracing",          version: "0.1.x",   license: "MIT",          url: "https://github.com/tokio-rs/tracing"),
         .init(name: "tracing-subscriber", version: "0.3.x", license: "MIT",          url: "https://github.com/tokio-rs/tracing"),
         .init(name: "parking_lot",      version: "0.12.x",  license: "MIT/Apache-2.0", url: "https://github.com/Amanieu/parking_lot"),

@@ -37,8 +37,6 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 const POLL_INTERVAL_MS: u64 = 100;
-#[allow(dead_code)]
-const MAX_RACE_RETRIES: u32 = 3;
 
 // ---------------------------------------------------------------------------
 // Watcher

@@ -369,7 +369,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-app"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "blake3",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-clipboard"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "arboard",
  "async-trait",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-core"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "bincode",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-devcli"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clipnotex-clipboard",
@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-donelog"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "bincode",
  "chrono",
@@ -458,7 +458,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-ffi"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "cbindgen",
  "chrono",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-format"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "clipnotex-core",
  "serde_json",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-hotkey"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "clipnotex-core",
  "global-hotkey",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-paste"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "clipnotex-clipboard",
  "clipnotex-core",
@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "clipnotex-store"
-version = "0.1.0-dev"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "argon2",

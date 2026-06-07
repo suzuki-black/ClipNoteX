@@ -110,3 +110,79 @@ fn default_exclusions() -> Vec<ExclusionRule> {
         },
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_settings_are_sane() {
+        let s = Settings::default();
+        assert_eq!(s.version, 1);
+        assert!(s.respect_concealed_pasteboard);
+        // All six hotkeys must have a default binding.
+        assert_eq!(s.shortcuts.len(), 6);
+        for id in [
+            HotkeyId::ShowHistory,
+            HotkeyId::ShowSnippets,
+            HotkeyId::PastePlain,
+            HotkeyId::PasteFormat,
+            HotkeyId::PasteFull,
+            HotkeyId::DoneCapture,
+        ] {
+            assert!(s.shortcuts.contains_key(&id), "missing default for {id:?}");
+        }
+    }
+
+    #[test]
+    fn default_history_config() {
+        let h = HistoryConfig::default();
+        assert_eq!(h.max_items, 1000);
+        assert!(h.keep_pinned);
+        assert_eq!(h.eviction_policy, EvictionPolicy::SizePriority);
+    }
+
+    #[test]
+    fn default_exclusions_cover_password_managers() {
+        let s = Settings::default();
+        let has_1pw = s.exclusions.iter().any(|r| {
+            matches!(r, ExclusionRule::BundleId(id) if id.contains("1password"))
+        });
+        assert!(has_1pw, "1Password should be excluded by default");
+    }
+
+    // The exclusion JSON shape is part of the FFI contract
+    // (cnx_get/set_exclusions_json). Lock it down.
+    #[test]
+    fn exclusion_rule_json_shape_matches_ffi_contract() {
+        let bundle = serde_json::to_value(ExclusionRule::BundleId("com.x".into())).unwrap();
+        assert_eq!(bundle, serde_json::json!({"match": "bundle_id", "value": "com.x"}));
+
+        let exe = serde_json::to_value(ExclusionRule::ExeBasename {
+            name: "1Password".into(),
+            fuzzy: true,
+        })
+        .unwrap();
+        assert_eq!(
+            exe,
+            serde_json::json!({"match": "exe_basename", "value": {"name": "1Password", "fuzzy": true}})
+        );
+
+        let title = serde_json::to_value(ExclusionRule::WindowTitle("*1Password*".into())).unwrap();
+        assert_eq!(title, serde_json::json!({"match": "window_title", "value": "*1Password*"}));
+    }
+
+    #[test]
+    fn exe_basename_fuzzy_defaults_false_when_omitted() {
+        let rule: ExclusionRule =
+            serde_json::from_value(serde_json::json!({"match": "exe_basename", "value": {"name": "Foo"}}))
+                .unwrap();
+        match rule {
+            ExclusionRule::ExeBasename { name, fuzzy } => {
+                assert_eq!(name, "Foo");
+                assert!(!fuzzy, "fuzzy must default to false");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+}

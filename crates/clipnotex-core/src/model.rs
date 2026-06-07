@@ -78,3 +78,71 @@ pub struct PayloadData {
     pub format_id: String,
     pub bytes: Vec<u8>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::ClipId;
+
+    fn sample_item() -> ClipItem {
+        ClipItem {
+            id: ClipId::new(),
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+            source_app: SourceApp {
+                bundle_id: Some("com.apple.Safari".into()),
+                exe_basename: None,
+                exe_path: None,
+                display_name: "Safari".into(),
+                window_title: Some("Example".into()),
+            },
+            primary_kind: ClipKind::Text,
+            payloads: vec![PayloadRef {
+                format_id: "public.utf8-plain-text".into(),
+                compression: Compression::Zstd,
+                storage: PayloadStorage::Inline(vec![1, 2, 3]),
+                raw_size: 3,
+            }],
+            digest: [7u8; 32],
+            text_preview: Some("hello".into()),
+            pinned: false,
+            tags: vec!["work".into()],
+            total_bytes: 3,
+        }
+    }
+
+    #[test]
+    fn clip_item_json_roundtrip_preserves_fields() {
+        let item = sample_item();
+        let json = serde_json::to_string(&item).unwrap();
+        let back: ClipItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, item.id);
+        assert_eq!(back.primary_kind, ClipKind::Text);
+        assert_eq!(back.digest, item.digest);
+        assert_eq!(back.text_preview.as_deref(), Some("hello"));
+        assert_eq!(back.tags, vec!["work".to_string()]);
+        assert_eq!(back.payloads.len(), 1);
+        assert_eq!(back.payloads[0].compression, Compression::Zstd);
+    }
+
+    #[test]
+    fn payload_storage_variants_roundtrip() {
+        let inline = PayloadStorage::Inline(vec![9, 8, 7]);
+        let blob = PayloadStorage::Blob(BlobId([3u8; 32]));
+        for s in [inline, blob] {
+            let json = serde_json::to_string(&s).unwrap();
+            let back: PayloadStorage = serde_json::from_str(&json).unwrap();
+            match (s, back) {
+                (PayloadStorage::Inline(a), PayloadStorage::Inline(b)) => assert_eq!(a, b),
+                (PayloadStorage::Blob(a), PayloadStorage::Blob(b)) => assert_eq!(a, b),
+                _ => panic!("variant changed across serde roundtrip"),
+            }
+        }
+    }
+
+    #[test]
+    fn clip_kind_equality() {
+        assert_eq!(ClipKind::Image, ClipKind::Image);
+        assert_ne!(ClipKind::Image, ClipKind::Text);
+    }
+}

@@ -8,7 +8,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.82+-orange?logo=rust)](https://www.rust-lang.org)
 [![Swift](https://img.shields.io/badge/Swift-5.9+-orange?logo=swift)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2013%2B-lightgrey?logo=apple)](#)
-[![Version](https://img.shields.io/badge/version-0.2.0--dev-brightgreen)](#)
+[![Version](https://img.shields.io/badge/version-0.4.0-brightgreen)](#)
 
 <br/>
 
@@ -108,7 +108,7 @@ ClipNoteX/
 │   │   ├── icon.icns                # app icon
 │   │   ├── build-app.sh             # cargo build → SwiftPM → .app
 │   │   └── sign-app.sh              # codesign + notarize helper
-│   └── windows/                     # WinUI 3 scaffolding (v0.4)
+│   └── windows/                     # WinUI 3 scaffolding (v0.5)
 └── tools/devcli                     # CLI for store/paste smoke tests
 ```
 
@@ -241,9 +241,10 @@ NSPasteboard change
 - [x] **v0.1** — initial Tauri prototype (now retired; tagged `v0.1-tauri-legacy`)
 - [x] **v0.2** — Swift + AppKit native shell, image paste, Clipy-compatible reorder, Reset feature
 - [x] **v0.3** — customizable hotkeys, exclusion-rule GUI, syntax-highlighted Format Paste, search highlight, third-party license dialog, hotkey toggle
-- [ ] **v0.4** — Windows version (WinUI 3 frontend on the same Rust core)
-- [ ] **v0.5** — opt-in iCloud-encrypted sync between Macs
-- [ ] **v0.6** — plugin API for custom formatters
+- [x] **v0.4** — reverse-engineered Japanese architecture doc, expanded unit-test suite, source audit (dead-code/license/vuln/PII) & image-decoder hardening
+- [ ] **v0.5** — Windows version (WinUI 3 frontend on the same Rust core)
+- [ ] **v0.6** — opt-in iCloud-encrypted sync between Macs
+- [ ] **v0.7** — plugin API for custom formatters
 - [ ] **v1.0** — Developer ID signing, notarization, Sparkle auto-update
 
 ---
@@ -398,7 +399,7 @@ CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 - **Rust コア** (`crates/`) — 暗号化・ストレージ・キャプチャ・ペースト・フォーマット
 - **C ABI 層** (`crates/clipnotex-ffi`) — cbindgen が `ClipNoteX.h` を自動生成
 - **macOS フロント** (`apps/macos`) — Swift + AppKit。Clipy / Maccy と同じ `NSStatusItem` パターン
-- **Windows フロント** (`apps/windows`) — v0.4 で同じ Rust staticlib を WinUI 3 から利用予定
+- **Windows フロント** (`apps/windows`) — v0.5 で同じ Rust staticlib を WinUI 3 から利用予定
 
 ---
 
@@ -407,9 +408,10 @@ CLIPNOTEX_EPHEMERAL=1 ./build/ClipNoteX.app/Contents/MacOS/ClipNoteX
 - [x] **v0.1** — Tauri 試作（廃止、タグ `v0.1-tauri-legacy` で退避済み）
 - [x] **v0.2** — Swift + AppKit ネイティブ実装、画像ペースト、Clipy 互換並び替え、リセット機能
 - [x] **v0.3** — ショートカットカスタマイズ、除外ルール GUI、フォーマットペーストのシンタックスハイライト、検索ハイライト、ライセンス情報ダイアログ、ホットキートグル
-- [ ] **v0.4** — Windows 版（同じ Rust コア＋ WinUI 3）
-- [ ] **v0.5** — opt-in iCloud 暗号化同期
-- [ ] **v0.6** — 独自フォーマッタ用プラグイン API
+- [x] **v0.4** — リバースエンジニアリングによる日本語アーキテクチャ設計書、単体テスト拡充、ソース監査（不要コード／ライセンス／脆弱性／個人情報）と画像デコーダの堅牢化
+- [ ] **v0.5** — Windows 版（同じ Rust コア＋ WinUI 3）
+- [ ] **v0.6** — opt-in iCloud 暗号化同期
+- [ ] **v0.7** — 独自フォーマッタ用プラグイン API
 - [ ] **v1.0** — Developer ID 署名、Notarization、Sparkle 自動更新
 
 ---

@@ -9,9 +9,5 @@ pub const BY_TIME: TableDefinition<(i64, &[u8]), ()> = TableDefinition::new("by_
 /// Digest -> ULID, for de-duplication.
 pub const BY_DIGEST: TableDefinition<&[u8], &[u8]> = TableDefinition::new("by_digest");
 
-/// Blob refcount + size + on-disk path. Value is bincode-encoded.
-#[allow(dead_code)]
-pub const BLOBS_META: TableDefinition<&[u8], &[u8]> = TableDefinition::new("blobs_meta");
-
 /// `version` -> u32 schema version.
 pub const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
